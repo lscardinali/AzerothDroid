@@ -2,8 +2,8 @@ package com.lscardinali.pocketwow.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Dark fantasy palette: slate surfaces, warm gold for actions and titles, frost blue for
-// secondary accents (Northrend), parchment for body text.
+// Slate surfaces, warm gold for actions and selection, frost blue for secondary accents and
+// controller focus (Northrend), parchment for body text.
 
 val Night = Color(0xFF0E1014)
 val Slate = Color(0xFF161920)

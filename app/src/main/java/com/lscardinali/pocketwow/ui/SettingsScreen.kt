@@ -4,19 +4,25 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -29,11 +35,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.snapshots.SnapshotStateMap
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.lscardinali.pocketwow.realm.PlayerbotsConfig
 import com.lscardinali.pocketwow.realm.RealmSettings
@@ -44,24 +53,30 @@ import kotlinx.coroutines.launch
 /**
  * Edits [RealmSettings] as a draft and saves it to [RealmSettingsStore]. The world server
  * reads the store when it starts, so nothing here touches a running realm.
+ * [primaryFocus] lands on the first setting.
  */
 @Composable
-fun SettingsScreen(modifier: Modifier, realmRunning: Boolean) {
+fun SettingsScreen(modifier: Modifier, primaryFocus: FocusRequester, realmRunning: Boolean) {
     val context = LocalContext.current
     val store = remember { RealmSettingsStore(context) }
     val saved by store.settings.collectAsState(initial = null)
     val scope = rememberCoroutineScope()
     var draft by remember { mutableStateOf<RealmSettings?>(null) }
     LaunchedEffect(saved) { if (draft == null) draft = saved }
+    // The draft arrives after the tab's first frame, too late for the tab bar's focus request.
+    val loaded = draft != null
+    LaunchedEffect(loaded) {
+        if (loaded) {
+            withFrameNanos {}
+            primaryFocus.requestFocus()
+        }
+    }
     // Fields whose text does not parse; their last good value is still in the draft.
     val unparsed = remember { mutableStateMapOf<String, Boolean>() }
     // Bumped on reset so every text field drops what was typed and shows the new value.
     var generation by remember { mutableIntStateOf(0) }
 
     Column(modifier.fillMaxSize()) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-            ScreenHeader("Settings", "Server rates and playerbots; applied when the realm next starts")
-        }
         val current = draft
         if (current == null) {
             Text("Loading", Modifier.padding(16.dp))
@@ -72,10 +87,10 @@ fun SettingsScreen(modifier: Modifier, realmRunning: Boolean) {
             Modifier
                 .weight(1f)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            SettingsCard("Before you change things") {
+            Panel("Before you change things", readable = true) {
                 Text(
                     if (realmRunning) {
                         "The realm is running. Saved changes apply the next time it starts: stop and start it."
@@ -87,12 +102,16 @@ fun SettingsScreen(modifier: Modifier, realmRunning: Boolean) {
                     "Memory-heavy options make bots or players spread over more of the world. This server " +
                         "never unloads map terrain, so whatever they load stays in memory until the realm stops.",
                     style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            key(generation) {
-                BotsCard(current.bots, unparsed) { draft = current.copy(bots = it) }
-                RatesCard(current.world, unparsed) { draft = current.copy(world = it) }
-                WorldCard(current.world, unparsed) { draft = current.copy(world = it) }
+            // Not a focus target itself: requesting focus here enters its first setting.
+            Column(Modifier.focusRequester(primaryFocus), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                key(generation) {
+                    BotsCard(current.bots, unparsed) { draft = current.copy(bots = it) }
+                    RatesCard(current.world, unparsed) { draft = current.copy(world = it) }
+                    WorldCard(current.world, unparsed) { draft = current.copy(world = it) }
+                }
             }
         }
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -102,9 +121,11 @@ fun SettingsScreen(modifier: Modifier, realmRunning: Boolean) {
                 Button(
                     onClick = { scope.launch { store.save(current) } },
                     enabled = current != saved && errors.isEmpty() && unparsed.none { it.value },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .focusRing(ButtonDefaults.shape),
                 ) { Text("Save") }
-                OutlinedButton(modifier = Modifier.weight(1f), onClick = {
+                OutlinedButton(modifier = Modifier.weight(1f).focusRing(ButtonDefaults.shape), onClick = {
                     draft = RealmSettings.DEFAULT
                     unparsed.clear()
                     generation++
@@ -155,15 +176,18 @@ private fun BotsCard(bots: PlayerbotsConfig, unparsed: SnapshotStateMap<String, 
         Toggle("Only with a player online", "Bots log in after a real player does and leave after they log out", bots.disabledWithoutRealPlayer, memoryHeavy = true) {
             onChange(bots.copy(disabledWithoutRealPlayer = it))
         }
-        Label("Maps bots travel to", "At least one", memoryHeavy = true)
-        @OptIn(ExperimentalLayoutApi::class)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            PlayerbotsConfig.MAPS.forEach { (id, name) ->
-                FilterChip(
-                    selected = id in bots.maps,
-                    onClick = { onChange(bots.copy(maps = if (id in bots.maps) bots.maps - id else bots.maps + id)) },
-                    label = { Text(name) },
-                )
+        PanelInset {
+            Column { Label("Maps bots travel to", "At least one", memoryHeavy = true) }
+            @OptIn(ExperimentalLayoutApi::class)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PlayerbotsConfig.MAPS.forEach { (id, name) ->
+                    FilterChip(
+                        selected = id in bots.maps,
+                        onClick = { onChange(bots.copy(maps = if (id in bots.maps) bots.maps - id else bots.maps + id)) },
+                        label = { Text(name) },
+                        modifier = Modifier.focusRing(FilterChipDefaults.shape),
+                    )
+                }
             }
         }
         Toggle("Join battlegrounds", null, bots.joinBattlegrounds) { onChange(bots.copy(joinBattlegrounds = it)) }
@@ -301,7 +325,7 @@ private fun <T> NumberSetting(
 ) {
     var text by remember { mutableStateOf(initial) }
     val invalid = parse(text) == null
-    OutlinedTextField(
+    ControllerTextField(
         value = text,
         onValueChange = {
             text = it
@@ -309,8 +333,7 @@ private fun <T> NumberSetting(
             unparsed[label] = parsed == null
             if (parsed != null) onChange(parsed)
         },
-        label = { Text(label) },
-        singleLine = true,
+        label = label,
         isError = invalid,
         keyboardOptions = KeyboardOptions(keyboardType = keyboard),
         supportingText = {
@@ -320,16 +343,13 @@ private fun <T> NumberSetting(
                 if (memoryHeavy) MemoryHeavy()
             }
         },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.padding(horizontal = 8.dp),
     )
 }
 
 @Composable
 private fun Toggle(label: String, note: String?, checked: Boolean, memoryHeavy: Boolean = false, onChange: (Boolean) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) { Label(label, note, memoryHeavy) }
-        Switch(checked, onChange)
-    }
+    SwitchRow(label, note, checked, extra = if (memoryHeavy) ({ MemoryHeavy() }) else null, onChange = onChange)
 }
 
 @Composable
@@ -341,11 +361,22 @@ private fun Choice(
     memoryHeavy: Boolean = false,
     onChange: (Int) -> Unit,
 ) {
-    Label(label, note, memoryHeavy)
-    @OptIn(ExperimentalLayoutApi::class)
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        options.forEach { (option, name) ->
-            FilterChip(selected = value == option, onClick = { onChange(option) }, label = { Text(name) })
+    PanelInset {
+        Column { Label(label, note, memoryHeavy) }
+        // Equal heights when a long label wraps.
+        SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().height(IntrinsicSize.Min)) {
+            options.forEachIndexed { index, (option, name) ->
+                val shape = SegmentedButtonDefaults.itemShape(index, options.size)
+                SegmentedButton(
+                    selected = value == option,
+                    onClick = { onChange(option) },
+                    shape = shape,
+                    label = { Text(name, textAlign = TextAlign.Center) },
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .focusRing(shape, outset = 0.dp),
+                )
+            }
         }
     }
 }
@@ -353,18 +384,19 @@ private fun Choice(
 @Composable
 private fun Label(label: String, note: String?, memoryHeavy: Boolean) {
     Text(label, style = MaterialTheme.typography.bodyLarge)
-    note?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+    note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     if (memoryHeavy) MemoryHeavy()
 }
 
 @Composable
 private fun MemoryHeavy() {
-    Text("MEMORY-HEAVY", color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.labelSmall)
+    Text("Memory-heavy", color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.labelMedium)
 }
 
+/** Cards of [SwitchRow]s and fields; fields, labels and chips pad themselves to line up. */
 @Composable
 private fun SettingsCard(title: String, content: @Composable () -> Unit) {
-    Panel(title) { content() }
+    Panel(title, contentPadding = RowPanelPadding) { content() }
 }
 
 private fun rate(value: Float) = if (value % 1f == 0f) value.toLong().toString() else value.toString()
