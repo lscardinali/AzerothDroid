@@ -27,6 +27,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -239,9 +240,10 @@ fun ControllerTextField(
         keyboardOptions = keyboardOptions,
         visualTransformation = visualTransformation,
         supportingText = supportingText,
+        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = RingColor, focusedLabelColor = RingColor),
         modifier = modifier
             .fillMaxWidth()
-            .focusRing(RoundedCornerShape(8.dp))
+            // No ring around label and supporting text: the outline, in ring colour, shows focus.
             .onFocusChanged { if (!it.isFocused) editing = false }
             .pointerInput(Unit) {
                 awaitEachGesture {
