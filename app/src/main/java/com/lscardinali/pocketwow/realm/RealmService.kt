@@ -194,6 +194,11 @@ class RealmService : Service() {
         /** Status of the running realm, or null when the service is not running. */
         fun currentStatus(): JSONObject? = instance?.status()
 
+        /** Account management, or null unless the service is running with its database up. */
+        fun accounts(): Accounts? = instance
+            ?.takeIf { it.database.state == MariaDbServer.State.RUNNING }
+            ?.let { Accounts(it.database) }
+
         fun start(context: Context) =
             ContextCompat.startForegroundService(context, Intent(context, RealmService::class.java))
 

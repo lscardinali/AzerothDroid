@@ -15,6 +15,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import kotlinx.coroutines.launch
 import androidx.compose.material3.Card
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -148,6 +154,8 @@ private fun HomeScreen(modifier: Modifier, onStart: () -> Unit, onStop: () -> Un
             }
         }
 
+        if (status != null) AccountsCard()
+
         InfoCard("World server") {
             val worldserver = status?.optJSONObject("worldserver")
             if (worldserver == null) {
@@ -185,6 +193,47 @@ private fun HomeScreen(modifier: Modifier, onStart: () -> Unit, onStop: () -> Un
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun AccountsCard() {
+    val scope = rememberCoroutineScope()
+    var name by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var gm by remember { mutableStateOf(true) }
+    var message by remember { mutableStateOf<String?>(null) }
+    var existing by remember { mutableStateOf<List<String>>(emptyList()) }
+    suspend fun refresh() {
+        existing = withContext(Dispatchers.IO) { runCatching { RealmService.accounts()?.list() }.getOrNull() }.orEmpty()
+    }
+    LaunchedEffect(Unit) { refresh() }
+
+    InfoCard("Accounts") {
+        Text(if (existing.isEmpty()) "No accounts yet" else existing.joinToString(", "))
+        OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true)
+        OutlinedTextField(
+            password, { password = it }, label = { Text("Password") }, singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Checkbox(gm, { gm = it })
+            Text("Game master (GM commands)")
+        }
+        Button(onClick = {
+            scope.launch {
+                message = withContext(Dispatchers.IO) {
+                    runCatching {
+                        val accounts = checkNotNull(RealmService.accounts()) { "Database not running" }
+                        accounts.create(name, password, gm)
+                        "Created ${name.uppercase()}"
+                    }.getOrElse { it.message ?: it.toString() }
+                }
+                password = ""
+                refresh()
+            }
+        }) { Text("Create account") }
+        message?.let { Text(it) }
     }
 }
 
