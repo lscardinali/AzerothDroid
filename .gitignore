@@ -1,0 +1,14 @@
+.gradle/
+.kotlin/
+build/
+local.properties
+.idea/
+*.iml
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Staged native runtimes (tools/stage_*.py)
+native/out/
+native/.cache/

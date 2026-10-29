@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">PocketWoW</string>
+    <string name="realm_channel_name">Realm service</string>
+</resources>
