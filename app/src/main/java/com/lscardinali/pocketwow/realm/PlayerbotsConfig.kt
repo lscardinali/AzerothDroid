@@ -60,6 +60,16 @@ data class PlayerbotsConfig(
     val levelNeighborShare: Float = 0.0f,
     /** Players of both factions shape both factions' bot levels (needs identical brackets). */
     val levelSyncFactions: Boolean = false,
+    /**
+     * 5-level brackets instead of the module's 10-level ones, so following players' levels
+     * puts bots within a few levels of them rather than anywhere in their decade.
+     */
+    val narrowLevelBrackets: Boolean = false,
+    /**
+     * Starter-level bots of every race may gather in a player's zone (patch 0005); otherwise
+     * a level-5 player in Durotar only meets orc and troll bots.
+     */
+    val anyStartingArea: Boolean = false,
     /** Rotates a larger bot pool online and offline: more faces, same number online at once. */
     val periodicOnlineOffline: Boolean = false,
     /** Bot pool size as a multiple of the online bot count, for [periodicOnlineOffline]. */
@@ -75,6 +85,9 @@ data class PlayerbotsConfig(
     val teleportMaxSeconds: Int = 18000,
     /** Chance (0-1) that a teleporting bot of level 10+ goes to a capital's banker instead. */
     val cityChance: Float = 0.25f,
+    /** Seconds a bot stays online before logging out; with rotation, another takes its place. */
+    val inWorldMinSeconds: Int = 600,
+    val inWorldMaxSeconds: Int = 28800,
 ) {
     fun overrides(): Map<String, String> = mapOf(
         RANDOM_BOT_AUTOLOGIN to flag(randomBotsEnabled),
@@ -112,7 +125,26 @@ data class PlayerbotsConfig(
         TELEPORT_MIN to teleportMinSeconds.toString(),
         TELEPORT_MAX to teleportMaxSeconds.toString(),
         CITY_CHANCE to cityChance.toString(),
-    )
+        ANY_STARTING_AREA to flag(anyStartingArea),
+        IN_WORLD_MIN to inWorldMinSeconds.toString(),
+        IN_WORLD_MAX to inWorldMaxSeconds.toString(),
+    ) + bracketOverrides()
+
+    /** Level brackets for both factions; none (the dist's 10-level ones) unless [narrowLevelBrackets]. */
+    private fun bracketOverrides(): Map<String, String> {
+        if (!narrowLevelBrackets) return emptyMap()
+        return buildMap {
+            put(BRACKET_COUNT, NARROW_BRACKETS.size.toString())
+            for (faction in listOf("Alliance", "Horde")) {
+                NARROW_BRACKETS.forEachIndexed { i, (levels, pct) ->
+                    val prefix = "Playerbots.LevelBrackets.$faction.Range${i + 1}"
+                    put("$prefix.Lower", levels.first.toString())
+                    put("$prefix.Upper", levels.last.toString())
+                    put("$prefix.Pct", pct.toString())
+                }
+            }
+        }
+    }
 
     /** Out-of-range or contradictory values, named by conf key; empty when valid. */
     fun errors(): List<String> = buildList {
@@ -143,6 +175,9 @@ data class PlayerbotsConfig(
         check(TELEPORT_MAX, teleportMaxSeconds, TELEPORT_RANGE)
         if (teleportMinSeconds > teleportMaxSeconds) add("$TELEPORT_MIN must not exceed $TELEPORT_MAX")
         if (cityChance !in SHARE_RANGE) add("$CITY_CHANCE must be 0-1")
+        check(IN_WORLD_MIN, inWorldMinSeconds, TELEPORT_RANGE)
+        check(IN_WORLD_MAX, inWorldMaxSeconds, TELEPORT_RANGE)
+        if (inWorldMinSeconds > inWorldMaxSeconds) add("$IN_WORLD_MIN must not exceed $IN_WORLD_MAX")
     }
 
     companion object {
@@ -178,6 +213,19 @@ data class PlayerbotsConfig(
         const val TELEPORT_MIN = "Playerbots.MinRandomBotTeleportInterval"
         const val TELEPORT_MAX = "Playerbots.MaxRandomBotTeleportInterval"
         const val CITY_CHANCE = "Playerbots.ProbTeleToBankers"
+        const val ANY_STARTING_AREA = "Playerbots.RandomBotConcentrateAnyStartingArea"
+        const val IN_WORLD_MIN = "Playerbots.MinRandomBotInWorldTime"
+        const val IN_WORLD_MAX = "Playerbots.MaxRandomBotInWorldTime"
+        const val BRACKET_COUNT = "Playerbots.LevelBrackets.NumRanges"
+        /** Settings-store key for [narrowLevelBrackets], which has no conf line of its own. */
+        const val NARROW_BRACKETS_KEY = "PocketWoW.NarrowLevelBrackets"
+
+        /**
+         * 1-4, 5-9, ... 75-79, 80, with starting shares summing to 100 per faction (the module
+         * requires it; dynamic weighting replaces them as players play).
+         */
+        val NARROW_BRACKETS: List<Pair<IntRange, Int>> =
+            listOf(1..4 to 6) + (1..15).map { i -> (i * 5)..(i * 5 + 4) to if (i < 15) 6 else 5 } + listOf(80..80 to 5)
 
         // The dist documents no upper bounds for these; the caps keep typos from asking a
         // phone for thousands of bots. 500 is the module's own default population.
@@ -218,13 +266,22 @@ data class PlayerbotsConfig(
             // Around the player's level: about a third of bots in their bracket, a fifth in each
             // neighbouring one, the rest spread over 1-80 for higher-level encounters.
             dynamicLevelDistribution = true,
-            levelDistributionWeight = 12.0f,
+            // As close to the player's level as the module goes: 5-level brackets and the
+            // strongest weight, so about a third of bots are within their 5 levels and most
+            // within about 7.
+            levelDistributionWeight = 20.0f,
+            narrowLevelBrackets = true,
+            anyStartingArea = true,
             levelNeighborShare = 0.5f,
             levelSyncFactions = true,
             // Re-teleport every 20-60 minutes so fitting bots follow the player between zones.
             teleportMinSeconds = 1200,
             teleportMaxSeconds = 3600,
             cityChance = 0.15f,
+            // Bots log out after 20-60 minutes and another from the pool logs in (and teleports
+            // to the player), instead of the same faces standing around for up to 8 hours.
+            inWorldMinSeconds = 1200,
+            inWorldMaxSeconds = 3600,
             periodicOnlineOffline = true,
             onlineOfflineRatio = 2.0f,
             // A phone's update loop is slower than a server's: start shedding idle bots earlier.

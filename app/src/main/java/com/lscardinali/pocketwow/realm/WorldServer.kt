@@ -178,7 +178,12 @@ class WorldServer(context: Context, private val native: NativeRuntime, private v
 
         val botOverrides = settings.bots.overrides() +
             ("PlayerbotsDatabaseInfo" to "127.0.0.1;${MariaDbServer.PORT};acore;acore;acore_playerbots")
-        File(etcDir, "modules/playerbots.conf").writeText(AuthServer.applyOverrides(botsDist.readText(), botOverrides))
+        // Brackets beyond the dist's nine have no line to replace; append those.
+        val botsConf = botsDist.readText()
+        val (present, missing) = botOverrides.entries.partition { (key, _) -> AuthServer.hasKey(botsConf, key) }
+        File(etcDir, "modules/playerbots.conf").writeText(
+            AuthServer.applyOverrides(botsConf, present.associate { it.toPair() }, missing.associate { it.toPair() }),
+        )
     }
 
     private fun awaitPort() {

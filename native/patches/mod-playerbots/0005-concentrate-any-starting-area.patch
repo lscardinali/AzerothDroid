@@ -1,0 +1,118 @@
+diff --git a/conf/playerbots.conf.dist b/conf/playerbots.conf.dist
+index 3e037ab..f9101bc 100644
+--- a/conf/playerbots.conf.dist
++++ b/conf/playerbots.conf.dist
+@@ -747,6 +747,12 @@ Playerbots.SyncLevelWithPlayers = 0
+ # Default: 0 (disabled)
+ Playerbots.RandomBotConcentrateInPlayerZone = 0
+ 
++# With RandomBotConcentrateInPlayerZone, also gather starter-level bots (level 16 and below) of every
++# race of the zone's faction, not only those whose race starts nearby. Without it, a player in a
++# starting zone only meets low-level bots of that zone's races.
++# Default: 0 (disabled)
++Playerbots.RandomBotConcentrateAnyStartingArea = 0
++
+ # Mark many quests ≤ bot level as complete (slows down bot creation)
+ # Default: 0 (disabled)
+ Playerbots.PreQuests = 0
+diff --git a/src/Bot/RandomPlayerbotMgr.cpp b/src/Bot/RandomPlayerbotMgr.cpp
+index 2a1d318..6bec24e 100644
+--- a/src/Bot/RandomPlayerbotMgr.cpp
++++ b/src/Bot/RandomPlayerbotMgr.cpp
+@@ -1624,7 +1624,8 @@ void RandomPlayerbotMgr::Revive(Player* player)
+     RandomTeleportGrindForLevel(player);
+ }
+ 
+-void RandomPlayerbotMgr::RandomTeleport(Player* bot, std::vector<WorldLocation>& locs, bool hearth)
++void RandomPlayerbotMgr::RandomTeleport(Player* bot, std::vector<WorldLocation>& locs, bool hearth,
++                                        bool anyStartingArea)
+ {
+     // ignore when alrdy teleported or not in the world yet.
+     if (bot->IsBeingTeleported() || !bot->IsInWorld())
+@@ -1724,7 +1725,7 @@ void RandomPlayerbotMgr::RandomTeleport(Player* bot, std::vector<WorldLocation>&
+ 
+         z = 0.05f + ground;
+ 
+-        if (!botAI->StarterLevelDistanceCheck(bot, loc, true))
++        if (!anyStartingArea && !botAI->StarterLevelDistanceCheck(bot, loc, true))
+             continue;
+ 
+         LocaleConstant const& locale = sWorld->GetDefaultDbcLocale();
+@@ -1848,6 +1849,7 @@ void RandomPlayerbotMgr::RandomTeleportForLevel(Player* bot)
+     }
+     std::vector<WorldLocation> locs = sTravelMgr.GetTeleportLocations(bot);
+ 
++    bool toPlayerZone = false;
+     if (sPlayerbotAIConfig.RandomBotConcentrateInPlayerZone && !locs.empty())
+     {
+         // No fitting spot in a player's zone: stay on a player's continent if possible. Players
+@@ -1855,14 +1857,17 @@ void RandomPlayerbotMgr::RandomTeleportForLevel(Player* bot)
+         std::vector<WorldLocation> sameMapLocs;
+         std::vector<WorldLocation> playerZoneLocs = GetPlayerZoneTeleportLocations(locs, bot, &sameMapLocs);
+         if (!playerZoneLocs.empty())
++        {
+             locs = std::move(playerZoneLocs);
++            toPlayerZone = true;
++        }
+         else if (!sameMapLocs.empty())
+             locs = std::move(sameMapLocs);
+     }
+ 
+     if (!locs.empty())
+     {
+-        RandomTeleport(bot, locs, false);
++        RandomTeleport(bot, locs, false, toPlayerZone && sPlayerbotAIConfig.RandomBotConcentrateAnyStartingArea);
+         return;
+     }
+ }
+@@ -1916,7 +1921,10 @@ std::vector<WorldLocation> RandomPlayerbotMgr::GetPlayerZoneTeleportLocations(st
+                       loc.GetMapId()) == sPlayerbotAIConfig.RandomBotMaps.end())
+             continue;
+ 
+-        if (botAI && !botAI->StarterLevelDistanceCheck(bot, loc, true))
++        // A player's zone may take starter-level bots of any race (RandomBotConcentrateAnyStartingArea);
++        // elsewhere they stay near their race's start.
++        bool const anyStartingArea = inPlayerZone && sPlayerbotAIConfig.RandomBotConcentrateAnyStartingArea;
++        if (botAI && !anyStartingArea && !botAI->StarterLevelDistanceCheck(bot, loc, true))
+             continue;
+ 
+         if (inPlayerZone)
+diff --git a/src/Bot/RandomPlayerbotMgr.h b/src/Bot/RandomPlayerbotMgr.h
+index fb17b18..04291a3 100644
+--- a/src/Bot/RandomPlayerbotMgr.h
++++ b/src/Bot/RandomPlayerbotMgr.h
+@@ -245,7 +245,8 @@ private:
+     bool ProcessBot(uint32 bot);
+     void ScheduleRandomize(uint32 bot, uint32 time);
+     void RandomTeleport(Player* bot);
+-    void RandomTeleport(Player* bot, std::vector<WorldLocation>& locs, bool hearth = false);
++    void RandomTeleport(Player* bot, std::vector<WorldLocation>& locs, bool hearth = false,
++                        bool anyStartingArea = false);
+     uint32 GetZoneLevel(uint16 mapId, float teleX, float teleY, float teleZ);
+     void UpdatePlayerZones();
+     std::vector<WorldLocation> GetPlayerZoneTeleportLocations(std::vector<WorldLocation> const& locs, Player* bot,
+diff --git a/src/PlayerbotAIConfig.cpp b/src/PlayerbotAIConfig.cpp
+index b9cf42c..b683b07 100644
+--- a/src/PlayerbotAIConfig.cpp
++++ b/src/PlayerbotAIConfig.cpp
+@@ -746,6 +746,8 @@ bool PlayerbotAIConfig::Initialize()
+     SyncLevelWithPlayers = sConfigMgr->GetOption<bool>("Playerbots.SyncLevelWithPlayers", false);
+     RandomBotConcentrateInPlayerZone =
+         sConfigMgr->GetOption<bool>("Playerbots.RandomBotConcentrateInPlayerZone", false);
++    RandomBotConcentrateAnyStartingArea =
++        sConfigMgr->GetOption<bool>("Playerbots.RandomBotConcentrateAnyStartingArea", false);
+     RandomBotGroupNearby = sConfigMgr->GetOption<bool>("Playerbots.RandomBotGroupNearby", false);
+ 
+     // arena
+diff --git a/src/PlayerbotAIConfig.h b/src/PlayerbotAIConfig.h
+index 84b0413..336c178 100644
+--- a/src/PlayerbotAIConfig.h
++++ b/src/PlayerbotAIConfig.h
+@@ -398,6 +398,7 @@ public:
+     std::unordered_map<NewRpgStatus, uint32> RpgStatusProbWeight;
+     bool SyncLevelWithPlayers;
+     bool RandomBotConcentrateInPlayerZone;
++    bool RandomBotConcentrateAnyStartingArea;
+     bool AutoLearnQuestSpells;
+     bool AutoTeleportForLevel;
+     bool RandomBotGroupNearby;

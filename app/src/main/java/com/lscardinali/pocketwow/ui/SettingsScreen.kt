@@ -231,6 +231,14 @@ private fun BotWorldCard(bots: PlayerbotsConfig, unparsed: SnapshotStateMap<Stri
             "Both factions follow all players", "Your level shapes enemy bots' levels too, for PvP",
             bots.levelSyncFactions,
         ) { onChange(bots.copy(levelSyncFactions = it)) }
+        Toggle(
+            "Close to your exact level", "5-level brackets instead of 10, so bots are within a few levels of you",
+            bots.narrowLevelBrackets,
+        ) { onChange(bots.copy(narrowLevelBrackets = it)) }
+        Toggle(
+            "Low-level bots of every race", "Starter bots of all your faction's races come to your zone, not only its own",
+            bots.anyStartingArea,
+        ) { onChange(bots.copy(anyStartingArea = it)) }
         IntSetting(
             "Shortest time between teleports", bots.teleportMinSeconds / 60, minutes(PlayerbotsConfig.TELEPORT_RANGE),
             "minutes", unparsed, note = "Shorter lets bots follow you between zones", memoryHeavy = true,
@@ -243,6 +251,14 @@ private fun BotWorldCard(bots: PlayerbotsConfig, unparsed: SnapshotStateMap<Stri
             "Teleports to a capital city", (bots.cityChance * 100).roundToInt(), PlayerbotsConfig.PERCENT_RANGE, "%",
             unparsed, note = "Bots of level 10+ that go to a banker instead of a questing zone",
         ) { onChange(bots.copy(cityChance = it / 100f)) }
+        IntSetting(
+            "Shortest time a bot stays online", bots.inWorldMinSeconds / 60, minutes(PlayerbotsConfig.TELEPORT_RANGE),
+            "minutes", unparsed, note = "Then it logs out and another bot logs in near you",
+        ) { onChange(bots.copy(inWorldMinSeconds = it * 60)) }
+        IntSetting(
+            "Longest time a bot stays online", bots.inWorldMaxSeconds / 60, minutes(PlayerbotsConfig.TELEPORT_RANGE),
+            "minutes", unparsed,
+        ) { onChange(bots.copy(inWorldMaxSeconds = it * 60)) }
         Toggle(
             "Rotate bots online and offline", "A pool larger than the online count takes turns: new faces, same memory",
             bots.periodicOnlineOffline,

@@ -129,6 +129,10 @@ class RealmSettingsStore(context: Context) {
                 put(int(TELEPORT_MIN), b.teleportMinSeconds, db.teleportMinSeconds)
                 put(int(TELEPORT_MAX), b.teleportMaxSeconds, db.teleportMaxSeconds)
                 put(float(CITY_CHANCE), b.cityChance, db.cityChance)
+                put(bool(NARROW_BRACKETS_KEY), b.narrowLevelBrackets, db.narrowLevelBrackets)
+                put(bool(ANY_STARTING_AREA), b.anyStartingArea, db.anyStartingArea)
+                put(int(IN_WORLD_MIN), b.inWorldMinSeconds, db.inWorldMinSeconds)
+                put(int(IN_WORLD_MAX), b.inWorldMaxSeconds, db.inWorldMaxSeconds)
             }
         }
 
@@ -195,6 +199,10 @@ class RealmSettingsStore(context: Context) {
                     teleportMinSeconds = prefs[int(TELEPORT_MIN)] ?: db.teleportMinSeconds,
                     teleportMaxSeconds = prefs[int(TELEPORT_MAX)] ?: db.teleportMaxSeconds,
                     cityChance = prefs[float(CITY_CHANCE)] ?: db.cityChance,
+                    narrowLevelBrackets = prefs[bool(NARROW_BRACKETS_KEY)] ?: db.narrowLevelBrackets,
+                    anyStartingArea = prefs[bool(ANY_STARTING_AREA)] ?: db.anyStartingArea,
+                    inWorldMinSeconds = prefs[int(IN_WORLD_MIN)] ?: db.inWorldMinSeconds,
+                    inWorldMaxSeconds = prefs[int(IN_WORLD_MAX)] ?: db.inWorldMaxSeconds,
                 )
             }
             return RealmSettings(world, bots)

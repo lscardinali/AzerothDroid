@@ -28,6 +28,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import sys
 import zipfile
 from pathlib import Path
@@ -74,11 +75,32 @@ def checkout_repo(path: Path, pin: dict, patches: Path) -> None:
     if head != pin["commit"]:
         run("git", "-C", path, "fetch", "--depth", "1", "origin", pin["commit"])
         run("git", "-C", path, "checkout", "--detach", pin["commit"])
-    for patch in sorted(patches.glob("*.patch")):
-        already = subprocess.run(["git", "-C", str(path), "apply", "--reverse", "--check", str(patch)],
-                                 capture_output=True).returncode == 0
-        if not already:
-            run("git", "-C", path, "apply", patch)
+    apply_patches(path, sorted(patches.glob("*.patch")))
+
+
+def apply_patches(path: Path, series: list[Path]) -> None:
+    """Brings the tracked files to pinned commit + patch series, keeping the checkout as is
+    when it already matches (so unchanged sources do not rebuild).
+
+    Patches may stack on the same file, so the series is checked as a whole: applied to a
+    scratch index from HEAD, then compared with the working tree. A tree that matches
+    neither HEAD nor the series holds edits no patch records; stop rather than lose them.
+    """
+    if not series:
+        return
+    git = ["git", "-C", str(path)]
+    with tempfile.TemporaryDirectory() as scratch:
+        env = {**os.environ, "GIT_INDEX_FILE": str(Path(scratch) / "index")}
+        subprocess.run([*git, "read-tree", "HEAD"], env=env, check=True)
+        for patch in series:
+            subprocess.run([*git, "apply", "--cached", str(patch)], env=env, check=True)
+        expected = subprocess.check_output([*git, "write-tree"], env=env, text=True).strip()
+    if subprocess.run([*git, "diff", "--quiet", expected], check=False).returncode == 0:
+        return
+    if subprocess.run([*git, "diff", "--quiet", "HEAD"], check=False).returncode != 0:
+        sys.exit(f"{path} has edits that are not in {series[0].parent}; regenerate the patches first")
+    for patch in series:
+        run(*git, "apply", patch)
 
 
 def checkout(lock: dict) -> None:

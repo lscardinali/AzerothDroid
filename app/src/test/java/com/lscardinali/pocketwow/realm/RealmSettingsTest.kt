@@ -36,7 +36,12 @@ class RealmSettingsTest {
     fun everyKeyExistsInTheDist() {
         // applyOverrides fails on unknown keys, which is what catches typos at realm start.
         AuthServer.applyOverrides(dist("worldserver.conf.dist"), changed.world.overrides())
-        AuthServer.applyOverrides(dist("playerbots.conf.dist"), changed.bots.overrides())
+        // Except level brackets past the dist's nine, which WorldServer appends instead.
+        val beyondDist = Regex("""\.Range(\d+)\.""")
+        val bots = changed.bots.overrides().filterKeys { key ->
+            beyondDist.find(key)?.groupValues?.get(1)?.toInt()?.let { it <= 9 } ?: true
+        }
+        AuthServer.applyOverrides(dist("playerbots.conf.dist"), bots)
     }
 
     @Test
@@ -62,7 +67,10 @@ class RealmSettingsTest {
             "Playerbots.DisabledWithoutRealPlayer" to "1",
             "Playerbots.LevelBrackets.Enabled" to "1",
             "Playerbots.LevelBrackets.Dynamic.UseDynamicDistribution" to "1",
-            "Playerbots.LevelBrackets.Dynamic.RealPlayerWeight" to "12.0",
+            "Playerbots.LevelBrackets.Dynamic.RealPlayerWeight" to "20.0",
+            "Playerbots.RandomBotConcentrateAnyStartingArea" to "1",
+            "Playerbots.MinRandomBotInWorldTime" to "1200",
+            "Playerbots.MaxRandomBotInWorldTime" to "3600",
             "Playerbots.LevelBrackets.Dynamic.NeighborShare" to "0.5",
             "Playerbots.LevelBrackets.Dynamic.SyncFactions" to "1",
             "Playerbots.MinRandomBotTeleportInterval" to "1200",
@@ -73,9 +81,25 @@ class RealmSettingsTest {
             "Playerbots.botActiveAloneSmartScaleDiffLimitCeiling" to "120",
         )
         val conf = dist("playerbots.conf.dist")
-        PlayerbotsConfig.MODEST.overrides().forEach { (key, value) ->
+        // Level brackets have their own test: the 5-level set has ranges the dist lacks.
+        PlayerbotsConfig.MODEST.overrides().filterKeys { !it.startsWith("Playerbots.LevelBrackets.Alliance.") &&
+            !it.startsWith("Playerbots.LevelBrackets.Horde.") && it != PlayerbotsConfig.BRACKET_COUNT
+        }.forEach { (key, value) ->
             assertEquals(key, tuned[key] ?: distValue(conf, key), value)
         }
+    }
+
+    @Test
+    fun narrowBracketsCoverEveryLevelOnce() {
+        val brackets = PlayerbotsConfig.NARROW_BRACKETS
+        assertEquals(100, brackets.sumOf { it.second })
+        assertEquals(1, brackets.first().first.first)
+        assertEquals(80, brackets.last().first.last)
+        brackets.zipWithNext().forEach { (a, b) -> assertEquals(a.first.last + 1, b.first.first) }
+        val overrides = PlayerbotsConfig.MODEST.overrides()
+        assertEquals(brackets.size.toString(), overrides[PlayerbotsConfig.BRACKET_COUNT])
+        assertEquals("75", overrides["Playerbots.LevelBrackets.Horde.Range16.Lower"])
+        assertEquals("80", overrides["Playerbots.LevelBrackets.Alliance.Range17.Upper"])
     }
 
     @Test

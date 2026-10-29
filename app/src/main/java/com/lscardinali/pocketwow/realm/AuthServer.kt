@@ -174,6 +174,9 @@ class AuthServer(context: Context, private val native: NativeRuntime, private va
                 additions.entries.joinToString("") { (key, value) -> "$key = ${quote(value)}\n" }
         }
 
+        fun hasKey(conf: String, key: String) =
+            Regex("""^${Regex.escape(key)}\s*=""", RegexOption.MULTILINE).containsMatchIn(conf)
+
         private fun quote(value: String) = if (value.toLongOrNull() != null) value else "\"$value\""
     }
 }
