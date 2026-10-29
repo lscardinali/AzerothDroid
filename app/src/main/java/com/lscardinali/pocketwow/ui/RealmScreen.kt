@@ -1,28 +1,30 @@
 package com.lscardinali.pocketwow.ui
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.lscardinali.pocketwow.realm.AuthServer
@@ -34,10 +36,12 @@ import org.json.JSONObject
 /**
  * The home tab: one control for the whole realm, then how each server and the device are
  * doing. [status] is RealmService's status JSON, null while the service is not running.
+ * [primaryFocus] goes on setup until the client data is in, then on Start/Stop.
  */
 @Composable
 fun RealmScreen(
     modifier: Modifier,
+    primaryFocus: FocusRequester,
     status: JSONObject?,
     device: SystemStats.DeviceMemory,
     clientDataReady: Boolean,
@@ -47,6 +51,8 @@ fun RealmScreen(
     onSetup: () -> Unit,
 ) {
     val setup by ClientDataInstaller.progress.collectAsState()
+    // Setup's button goes away once the data is in; hand focus on to Start.
+    LaunchedEffect(clientDataReady) { if (clientDataReady) primaryFocus.requestFocus() }
     Column(
         modifier
             .fillMaxSize()
@@ -54,9 +60,8 @@ fun RealmScreen(
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        ScreenHeader("PocketWoW", "A Wrath of the Lich King realm with playerbots, on this phone")
-        if (!clientDataReady) SetupPanel(clientDataVersion, setup, onSetup)
-        RealmPanel(status, clientDataReady, onStart, onStop)
+        if (!clientDataReady) SetupPanel(clientDataVersion, setup, primaryFocus, onSetup)
+        RealmPanel(status, clientDataReady, if (clientDataReady) primaryFocus else null, onStart, onStop)
         if (status != null) ServersPanel(status)
         MemoryPanel(status, device)
         ConnectPanel(status)
@@ -64,7 +69,13 @@ fun RealmScreen(
 }
 
 @Composable
-private fun RealmPanel(status: JSONObject?, clientDataReady: Boolean, onStart: () -> Unit, onStop: () -> Unit) {
+private fun RealmPanel(
+    status: JSONObject?,
+    clientDataReady: Boolean,
+    focus: FocusRequester?,
+    onStart: () -> Unit,
+    onStop: () -> Unit,
+) {
     val servers = SERVERS.map { (key, _) -> status?.optJSONObject(key) }
     val states = servers.map { it?.optString("state") }
     val health = when {
@@ -77,7 +88,7 @@ private fun RealmPanel(status: JSONObject?, clientDataReady: Boolean, onStart: (
     Panel {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("Realm", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
+                Text("Realm", style = MaterialTheme.typography.titleMedium)
                 Text(
                     when (health) {
                         Health.Up -> "Up ${uptime(status?.optLong("uptimeSec") ?: 0)}. Log in with your client."
@@ -95,54 +106,43 @@ private fun RealmPanel(status: JSONObject?, clientDataReady: Boolean, onStart: (
         if (health == Health.Busy || health == Health.Stopping) {
             LinearProgressIndicator(Modifier.fillMaxWidth())
         }
-        if (status == null) {
-            Button(
-                onClick = onStart,
-                enabled = clientDataReady,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-            ) { Text("Start realm", style = MaterialTheme.typography.titleMedium) }
-        } else {
-            OutlinedButton(
-                onClick = onStop,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-            ) { Text("Stop realm", style = MaterialTheme.typography.titleMedium) }
-        }
+        // One button for both, so it keeps controller focus when the realm starts or stops.
+        val running = status != null
+        Button(
+            onClick = if (running) onStop else onStart,
+            enabled = running || clientDataReady,
+            colors = if (running) ButtonDefaults.filledTonalButtonColors() else ButtonDefaults.buttonColors(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(if (focus != null) Modifier.focusRequester(focus) else Modifier)
+                .focusRing(ButtonDefaults.shape),
+        ) { Text(if (running) "Stop realm" else "Start realm") }
     }
 }
 
 @Composable
 private fun ServersPanel(status: JSONObject) {
-    Panel("Servers") {
-        SERVERS.forEachIndexed { index, (key, name) ->
-            if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            val server = status.optJSONObject(key) ?: return@forEachIndexed
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(name, style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        detail(key, server),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                HealthBadge(Health.of(server.optString("state")))
-            }
-            if (!server.isNull("error")) {
-                Text(server.optString("error"), color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-            }
+    Panel("Servers", contentPadding = PaddingValues(top = 16.dp), readable = true) {
+        SERVERS.forEach { (key, name) ->
+            val server = status.optJSONObject(key) ?: return@forEach
+            ListItem(
+                headlineContent = { Text(name) },
+                supportingContent = {
+                    Column {
+                        Text(detail(key, server))
+                        if (!server.isNull("error")) Text(server.optString("error"), color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                trailingContent = { HealthBadge(Health.of(server.optString("state"))) },
+                colors = cardListItemColors(),
+            )
         }
     }
 }
 
 @Composable
 private fun MemoryPanel(status: JSONObject?, device: SystemStats.DeviceMemory) {
-    Panel("Memory") {
+    Panel("Memory", readable = true) {
         Meter(
             "Device RAM", device.totalKb - device.availableKb, device.totalKb,
             "${mb(device.availableKb)} free of ${mb(device.totalKb)}",
@@ -187,14 +187,15 @@ private fun ProcessRow(name: String, rssKb: Long, swapKb: Long?) {
 
 @Composable
 private fun ConnectPanel(status: JSONObject?) {
-    Panel("Connect a client") {
+    Panel("Connect a client", readable = true) {
         Text(
             "Set realmlist.wtf in your 3.3.5a client (Data/enUS or enGB) to:",
             style = MaterialTheme.typography.bodyMedium,
         )
         val realm = status?.optJSONObject("worldserver")?.optString("realmAddress")?.takeIf { it.isNotEmpty() }
         val addresses = SystemStats.lanAddresses()
-        SelectionContainer {
+        // Selectable by touch, but not a focus stop: a controller has nothing to do there.
+        SelectionContainer(Modifier.focusProperties { canFocus = false }) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 RealmlistLine("set realmlist 127.0.0.1", "this phone")
                 addresses.forEach { (nic, ip) -> RealmlistLine("set realmlist $ip", "other devices, $nic") }
@@ -214,7 +215,7 @@ private fun ConnectPanel(status: JSONObject?) {
 @Composable
 private fun RealmlistLine(line: String, where: String) {
     Column {
-        Text(where.uppercase(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(where, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(
             line,
             fontFamily = FontFamily.Monospace,
@@ -225,7 +226,11 @@ private fun RealmlistLine(line: String, where: String) {
 }
 
 @Composable
-private fun SetupPanel(version: String, progress: ClientDataInstaller.Progress, onSetup: () -> Unit) {
+private fun SetupPanel(version: String, progress: ClientDataInstaller.Progress, focus: FocusRequester, onSetup: () -> Unit) {
+    val buttonModifier = Modifier
+        .fillMaxWidth()
+        .focusRequester(focus)
+        .focusRing(ButtonDefaults.shape)
     Panel("First-time setup") {
         Text(
             "The world server needs WotLK 3.3.5a client data (maps, DBC, pathfinding), $version, " +
@@ -242,10 +247,10 @@ private fun SetupPanel(version: String, progress: ClientDataInstaller.Progress, 
             }
             is ClientDataInstaller.Progress.Failed -> {
                 Text(progress.message, color = MaterialTheme.colorScheme.error)
-                Button(onClick = onSetup, modifier = Modifier.fillMaxWidth()) { Text("Retry") }
+                Button(onClick = onSetup, modifier = buttonModifier) { Text("Retry") }
             }
             ClientDataInstaller.Progress.Idle ->
-                Button(onClick = onSetup, modifier = Modifier.fillMaxWidth()) { Text("Download and install") }
+                Button(onClick = onSetup, modifier = buttonModifier) { Text("Download and install") }
             ClientDataInstaller.Progress.Done -> Text("Installed")
         }
     }
