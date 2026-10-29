@@ -105,7 +105,7 @@ class RealmSettingsTest {
         assertEquals(emptyList<String>(), changed.errors())
         fun errors(settings: RealmSettings) = settings.errors().joinToString()
         val bots = PlayerbotsConfig.MODEST
-        assertTrue(errors(RealmSettings(bots = bots.copy(minRandomBots = 20))).contains("must not exceed Playerbots.MaxRandomBots"))
+        assertTrue(errors(RealmSettings(bots = bots.copy(minRandomBots = bots.maxRandomBots + 1))).contains("must not exceed Playerbots.MaxRandomBots"))
         assertTrue(errors(RealmSettings(bots = bots.copy(maps = emptySet()))).contains("at least one map"))
         assertTrue(errors(RealmSettings(bots = bots.copy(maxRandomBots = 501))).contains("Playerbots.MaxRandomBots must be 0-500"))
         assertTrue(errors(RealmSettings(WorldConfig(maxPlayerLevel = 60))).contains("must not exceed MaxPlayerLevel"))
