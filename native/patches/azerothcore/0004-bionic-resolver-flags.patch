@@ -1,0 +1,17 @@
+diff --git a/src/common/Asio/Resolver.h b/src/common/Asio/Resolver.h
+index 4c829b5..3ee4171 100644
+--- a/src/common/Asio/Resolver.h
++++ b/src/common/Asio/Resolver.h
+@@ -35,7 +35,12 @@ namespace Acore::Asio
+         Optional<boost::asio::ip::tcp::endpoint> Resolve(boost::asio::ip::tcp const& protocol, std::string const& host, std::string const& service)
+         {
+             boost::system::error_code ec;
++#ifdef __ANDROID__
++            // Bionic's getaddrinfo rejects AI_ALL/AI_V4MAPPED with EAI_BADFLAGS, even for numeric hosts.
++            boost::asio::ip::resolver_base::flags flagsResolver = boost::asio::ip::resolver_base::flags();
++#else
+             boost::asio::ip::resolver_base::flags flagsResolver = boost::asio::ip::resolver_base::all_matching;
++#endif
+             boost::asio::ip::tcp::resolver::results_type results = _impl.resolve(protocol, host, service, flagsResolver, ec);
+             if (results.begin() == results.end() || ec)
+                 return {};

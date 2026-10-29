@@ -4,19 +4,16 @@ import android.content.Context
 import android.util.Log
 import org.json.JSONObject
 import java.io.File
-import java.nio.file.Files
 import java.util.concurrent.TimeUnit
 
 /**
- * Runs the MariaDB server staged by tools/stage_mariadb.py as a child process.
- *
- * Executables and libraries live in nativeLibraryDir (the only place an app may exec
- * from). Their original sonames are recreated as symlinks under runtime/lib, which is
- * passed as LD_LIBRARY_PATH. Data lives in filesDir/mariadb/data.
+ * Runs the MariaDB server staged by tools/stage_mariadb.py as a child process
+ * (see [NativeRuntime] for how executables and libraries are packaged).
+ * Data lives in filesDir/mariadb/data.
  *
  * Listens on a unix socket and on 127.0.0.1:3306 (loopback only, not LAN).
  */
-class MariaDbServer(private val context: Context) {
+class MariaDbServer(context: Context, private val native: NativeRuntime) {
 
     enum class State { STOPPED, INSTALLING, INITIALIZING, STARTING, RUNNING, STOPPING, FAILED }
 
@@ -25,10 +22,8 @@ class MariaDbServer(private val context: Context) {
     @Volatile var error: String? = null
         private set
 
-    private val nativeDir = File(context.applicationInfo.nativeLibraryDir)
     private val root = File(context.filesDir, "mariadb")
     private val runtime = File(root, "runtime")
-    private val libDir = File(runtime, "lib")
     private val dataDir = File(root, "data")
     private val runDir = File(root, "run")
     private val tmpDir = File(root, "tmp")
@@ -38,9 +33,6 @@ class MariaDbServer(private val context: Context) {
     val logFile = File(root, "mariadb.err")
     private val initializedMarker = File(dataDir, ".pocketwow-initialized")
     private val usersMarker = File(dataDir, ".pocketwow-users")
-
-    private val mariadbd = File(nativeDir, "libmariadbd.so")
-    private val client = File(nativeDir, "libmariadb_client.so")
 
     private var process: Process? = null
     private var version: String? = null
@@ -81,7 +73,7 @@ class MariaDbServer(private val context: Context) {
     }
 
     fun status(): JSONObject {
-        val pid = readPid()
+        val pid = NativeRuntime.readPid(pidFile)
         val memory = pid?.let { SystemStats.processMemory(it) }
         return JSONObject()
             .put("state", state.name)
@@ -96,37 +88,19 @@ class MariaDbServer(private val context: Context) {
 
     // -- install ------------------------------------------------------------
 
-    /** Copies assets/mariadb into filesDir and links sonames to nativeLibraryDir. */
+    /** Copies assets/mariadb (share data, bootstrap SQL) into filesDir and links libraries. */
     private fun install() {
-        val manifest = JSONObject(context.assets.open("$ASSET_DIR/manifest.json").bufferedReader().readText())
+        val manifest = native.manifest(COMPONENT)
         version = manifest.getString("version")
+        native.linkLibraries(COMPONENT)
         val stamp = File(runtime, ".installed")
-        val identity = "${manifest.getString("bootstrapSha256")} ${context.packageManager
-            .getPackageInfo(context.packageName, 0).lastUpdateTime}"
+        val identity = "${manifest.getString("bootstrapSha256")} ${native.installIdentity}"
         if (stamp.isFile && stamp.readText() == identity) return
 
         runtime.deleteRecursively()
-        copyAssets(ASSET_DIR, runtime)
-        libDir.mkdirs()
-        val links = manifest.getJSONObject("links")
-        for (soname in links.keys()) {
-            val target = File(nativeDir, links.getString(soname))
-            check(target.isFile) { "missing native library ${target.name}" }
-            Files.createSymbolicLink(File(libDir, soname).toPath(), target.toPath())
-        }
+        native.copyAssets(COMPONENT, runtime)
         File(runtime, "plugin").mkdirs()
         stamp.writeText(identity)
-    }
-
-    private fun copyAssets(path: String, target: File) {
-        val children = context.assets.list(path).orEmpty()
-        if (children.isEmpty()) {
-            target.parentFile?.mkdirs()
-            context.assets.open(path).use { input -> target.outputStream().use { input.copyTo(it) } }
-        } else {
-            target.mkdirs()
-            children.forEach { copyAssets("$path/$it", File(target, it)) }
-        }
     }
 
     private fun writeConfig() {
@@ -172,7 +146,7 @@ class MariaDbServer(private val context: Context) {
         dataDir.deleteRecursively()
         dataDir.mkdirs()
         val bootstrapSql = File(runtime, "bootstrap.sql")
-        val result = command(mariadbd, "--defaults-file=${configFile.path}", "--bootstrap")
+        val result = command(MARIADBD, "--defaults-file=${configFile.path}", "--bootstrap")
             .redirectInput(bootstrapSql)
             .redirectErrorStream(true)
             .redirectOutput(ProcessBuilder.Redirect.appendTo(logFile))
@@ -185,7 +159,7 @@ class MariaDbServer(private val context: Context) {
     private fun launch() {
         pidFile.delete()
         socket.delete()
-        process = command(mariadbd, "--defaults-file=${configFile.path}")
+        process = command(MARIADBD, "--defaults-file=${configFile.path}")
             .redirectErrorStream(true)
             .redirectOutput(ProcessBuilder.Redirect.appendTo(logFile))
             .start()
@@ -221,24 +195,15 @@ class MariaDbServer(private val context: Context) {
     }
 
     private fun terminate(timeoutSec: Long) {
-        val pid = readPid()
-        if (pid != null && isMariadbd(pid)) {
-            android.os.Process.sendSignal(pid, SIGTERM)
-            val deadline = System.currentTimeMillis() + timeoutSec * 1000
-            while (isMariadbd(pid) && System.currentTimeMillis() < deadline) Thread.sleep(200)
-            if (isMariadbd(pid)) {
-                Log.w(TAG, "mariadbd $pid ignored SIGTERM, killing")
-                android.os.Process.killProcess(pid)
-            }
-        }
+        NativeRuntime.readPid(pidFile)?.let { NativeRuntime.terminate(it, MARIADBD, timeoutSec) }
         process?.let { if (!it.waitFor(5, TimeUnit.SECONDS)) it.destroyForcibly() }
         process = null
     }
 
     /** A server left running by a previous, killed instance of the realm process. */
     private fun killStaleServer() {
-        val pid = readPid() ?: return
-        if (isMariadbd(pid)) {
+        val pid = NativeRuntime.readPid(pidFile) ?: return
+        if (NativeRuntime.isRunning(pid, MARIADBD)) {
             Log.w(TAG, "Stopping stale mariadbd $pid")
             terminate(timeoutSec = 60)
         }
@@ -248,7 +213,7 @@ class MariaDbServer(private val context: Context) {
 
     /** Runs SQL as root through the bundled client. Returns exit code and output. */
     private fun sql(statements: String): Pair<Int, String> {
-        val proc = command(client, "--defaults-file=${configFile.path}", "--user=root", "--batch")
+        val proc = command(CLIENT, "--defaults-file=${configFile.path}", "--user=root", "--batch")
             .redirectErrorStream(true)
             .start()
         proc.outputStream.bufferedWriter().use { it.write(statements) }
@@ -257,23 +222,14 @@ class MariaDbServer(private val context: Context) {
         return (if (proc.isAlive) -1 else proc.exitValue()) to output
     }
 
-    private fun command(executable: File, vararg args: String) =
-        ProcessBuilder(listOf(executable.path) + args).apply {
-            environment()["LD_LIBRARY_PATH"] = libDir.path
-            environment()["TMPDIR"] = tmpDir.path
-            environment()["HOME"] = root.path
-        }
-
-    private fun readPid(): Int? = pidFile.takeIf { it.isFile }?.readText()?.trim()?.toIntOrNull()
-
-    private fun isMariadbd(pid: Int): Boolean =
-        runCatching { File("/proc/$pid/cmdline").readText().contains("libmariadbd.so") }
-            .getOrDefault(false)
+    private fun command(executable: String, vararg args: String) =
+        native.command(executable, *args, home = root)
 
     companion object {
         private const val TAG = "MariaDbServer"
-        private const val ASSET_DIR = "mariadb"
-        private const val SIGTERM = 15
+        private const val COMPONENT = "mariadb"
+        private const val MARIADBD = "libmariadbd.so"
+        const val CLIENT = "libmariadb_client.so"
         const val PORT = 3306
     }
 }

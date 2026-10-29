@@ -1,0 +1,42 @@
+diff --git a/src/server/database/Database/PreparedStatement.h b/src/server/database/Database/PreparedStatement.h
+index 5a1e729..6f66505 100644
+--- a/src/server/database/Database/PreparedStatement.h
++++ b/src/server/database/Database/PreparedStatement.h
+@@ -76,7 +76,7 @@ public:
+     template<typename T>
+     inline Acore::Types::is_default<T> SetData(const uint8 index, T value)
+     {
+-        SetValidData(index, value);
++        SetValidData(index, NormalizeInteger(value));
+     }
+ 
+     // Set enums
+@@ -110,7 +110,7 @@ public:
+     template<class _Rep, class _Period>
+     inline void SetData(const uint8 index, std::chrono::duration<_Rep, _Period> const& value, bool convertToUin32 = true)
+     {
+-        SetValidData(index, convertToUin32 ? static_cast<uint32>(value.count()) : value.count());
++        SetValidData(index, convertToUin32 ? static_cast<uint32>(value.count()) : NormalizeInteger(value.count()));
+     }
+ 
+     // Set all
+@@ -124,6 +124,19 @@ public:
+     [[nodiscard]] std::vector<PreparedStatementData> const& GetParameters() const { return statement_data; }
+ 
+ protected:
++    // libc++ (Android) uses long long for e.g. std::chrono::duration::rep, a distinct type from
++    // int64 (long) on LP64 targets. Map it onto the integer types statement_data can hold.
++    template<typename T>
++    static constexpr auto NormalizeInteger(T value)
++    {
++        if constexpr (std::is_same_v<T, long long> && !std::is_same_v<long long, int64>)
++            return static_cast<int64>(value);
++        else if constexpr (std::is_same_v<T, unsigned long long> && !std::is_same_v<unsigned long long, uint64>)
++            return static_cast<uint64>(value);
++        else
++            return value;
++    }
++
+     template<typename T>
+     Acore::Types::is_non_string_view_v<T> SetValidData(const uint8 index, T const& value);
+ 

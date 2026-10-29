@@ -119,6 +119,21 @@ private fun HomeScreen(modifier: Modifier, onStart: () -> Unit, onStop: () -> Un
             }
         }
 
+        InfoCard("Auth server") {
+            val authserver = status?.optJSONObject("authserver")
+            if (authserver == null) {
+                Text("Not running")
+            } else {
+                Text("${authserver.optString("state")}  port ${authserver.optInt("port")}  (AzerothCore ${authserver.optString("commit")})")
+                if (!authserver.isNull("pid")) {
+                    Text("PID ${authserver.optInt("pid")}, RSS ${mb(authserver.optLong("rssKb"))} (peak ${mb(authserver.optLong("peakRssKb"))})")
+                }
+                if (!authserver.isNull("error")) {
+                    Text(authserver.optString("error"), color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+
         InfoCard("Memory") {
             Text("Device: ${mb(device.availableKb)} free of ${mb(device.totalKb)}")
             Text("UI process RSS: ${mb(ui?.rssKb)}")

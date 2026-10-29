@@ -1,0 +1,13 @@
+diff --git a/src/common/Threading/ProcessPriority.cpp b/src/common/Threading/ProcessPriority.cpp
+index fca37f6..1a9e238 100644
+--- a/src/common/Threading/ProcessPriority.cpp
++++ b/src/common/Threading/ProcessPriority.cpp
+@@ -90,7 +90,7 @@ void SetProcessPriority(std::string const& logChannel, uint32 affinity, bool hig
+         {
+             CPU_ZERO(&mask);
+             sched_getaffinity(0, sizeof(mask), &mask);
+-            LOG_INFO(logChannel, "Using processors (bitmask, hex): {:x}", *(__cpu_mask*)(&mask));
++            LOG_INFO(logChannel, "Using processors (bitmask, hex): {:x}", *(unsigned long*)(&mask));
+         }
+     }
+ 

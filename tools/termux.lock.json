@@ -1,6 +1,31 @@
 {
   "index": "https://packages.termux.dev/apt/termux-main/dists/stable/main/binary-aarch64/Packages.gz",
+  "roots": [
+    "mariadb",
+    "boost",
+    "boost-headers",
+    "boost-static",
+    "openssl",
+    "zlib",
+    "libbz2",
+    "liblzma"
+  ],
   "packages": {
+    "boost": {
+      "version": "1:1.92.0",
+      "filename": "pool/main/b/boost/boost_1:1.92.0_aarch64.deb",
+      "sha256": "1cc81ed769453f84944095dab82228af747637e33e5eefdb8738ad2ca6964b24"
+    },
+    "boost-headers": {
+      "version": "1:1.92.0",
+      "filename": "pool/main/b/boost-headers/boost-headers_1:1.92.0_all.deb",
+      "sha256": "2fc2aa4171f8883da7e62072fafa54e43e792f7c1a256084c51deefb0127fe4f"
+    },
+    "boost-static": {
+      "version": "1:1.92.0",
+      "filename": "pool/main/b/boost-static/boost-static_1:1.92.0_aarch64.deb",
+      "sha256": "30662a48061bde2371f7392ca52617b363a408b00479bbe30a9043abfa41f324"
+    },
     "ca-certificates": {
       "version": "1:2026.10.20-1",
       "filename": "pool/main/c/ca-certificates/ca-certificates_1:2026.10.20-1_all.deb",
@@ -15,6 +40,11 @@
       "version": "29-1",
       "filename": "pool/main/liba/libandroid-support/libandroid-support_29-1_aarch64.deb",
       "sha256": "f2f145d6135ad4843ac9670153be3e3944dc1e6f1736d46d2306c28f2b86f517"
+    },
+    "libandroid-wordexp": {
+      "version": "0.1-1",
+      "filename": "pool/main/liba/libandroid-wordexp/libandroid-wordexp_0.1-1_aarch64.deb",
+      "sha256": "e4c6e13874e77e33409e0a13b7b5863ffaf7c31daa4043607df25892272b64fb"
     },
     "libbz2": {
       "version": "1.0.8-8",

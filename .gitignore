@@ -12,3 +12,7 @@ captures/
 # Staged native runtimes (tools/stage_*.py)
 native/out/
 native/.cache/
+native/src/
+native/.build/
+
+__pycache__/

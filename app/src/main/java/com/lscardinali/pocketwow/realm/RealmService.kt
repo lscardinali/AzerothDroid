@@ -20,8 +20,8 @@ import org.json.JSONObject
 import java.util.concurrent.Executors
 
 /**
- * Foreground service hosting the realm stack: status endpoint and MariaDB for now;
- * authserver and worldserver get layered on here one at a time.
+ * Foreground service hosting the realm stack: status endpoint, MariaDB and authserver
+ * for now; worldserver gets layered on here next.
  *
  * No wake lock is held: when the device sleeps the CPU suspends and every process
  * freezes, then continues where it left off on wake. The foreground state is what keeps
@@ -31,13 +31,16 @@ class RealmService : Service() {
 
     private var statusServer: StatusServer? = null
     private lateinit var database: MariaDbServer
+    private lateinit var auth: AuthServer
     /** Start/stop steps block for seconds, so they run off the main thread, in order. */
     private val lifecycle = Executors.newSingleThreadExecutor()
     private var startedAt = 0L
 
     override fun onCreate() {
         super.onCreate()
-        database = MariaDbServer(this)
+        val native = NativeRuntime(this)
+        database = MariaDbServer(this, native)
+        auth = AuthServer(this, native)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -45,7 +48,7 @@ class RealmService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP) {
             lifecycle.execute {
-                database.stop()
+                stopStack()
                 stopSelf()
             }
             return START_NOT_STICKY
@@ -69,15 +72,24 @@ class RealmService : Service() {
                 Log.e(TAG, "Status server failed to start", e)
             }
         }
-        lifecycle.execute { database.start() }
+        lifecycle.execute {
+            database.start()
+            if (database.state == MariaDbServer.State.RUNNING) auth.start()
+        }
+    }
+
+    /** Reverse start order: servers first, so their last writes reach the database. */
+    private fun stopStack() {
+        auth.stop()
+        database.stop()
     }
 
     override fun onDestroy() {
         statusServer?.stop()
         statusServer = null
         // Normally already stopped via ACTION_STOP. If the system destroys us instead,
-        // still ask MariaDB to shut down cleanly; a leftover server is reaped on next start.
-        lifecycle.execute { database.stop() }
+        // still shut the stack down cleanly; leftover processes are reaped on next start.
+        lifecycle.execute { stopStack() }
         lifecycle.shutdown()
         super.onDestroy()
     }
@@ -86,6 +98,8 @@ class RealmService : Service() {
         "/" to { StatusServer.JSON to status().toString(2) },
         "/status" to { StatusServer.JSON to status().toString(2) },
         "/logs/mariadb" to { StatusServer.TEXT to tail(database.logFile) },
+        "/logs/authserver" to { StatusServer.TEXT to tail(auth.logFile) },
+        "/logs/authserver.out" to { StatusServer.TEXT to tail(auth.stdoutFile) },
     )
 
     private fun status(): JSONObject {
@@ -112,6 +126,7 @@ class RealmService : Service() {
                 ),
             )
             .put("database", database.status())
+            .put("authserver", auth.status())
     }
 
     private fun tail(file: java.io.File, maxBytes: Int = 16 * 1024): String {
