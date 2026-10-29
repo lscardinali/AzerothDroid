@@ -124,6 +124,11 @@ class RealmSettingsStore(context: Context) {
                 put(float(PERIODIC_RATIO), b.onlineOfflineRatio, db.onlineOfflineRatio)
                 put(int(SMART_SCALE_FLOOR), b.smartScaleFloorMs, db.smartScaleFloorMs)
                 put(int(SMART_SCALE_CEILING), b.smartScaleCeilingMs, db.smartScaleCeilingMs)
+                put(float(DYNAMIC_LEVELS_NEIGHBORS), b.levelNeighborShare, db.levelNeighborShare)
+                put(bool(DYNAMIC_LEVELS_SYNC_FACTIONS), b.levelSyncFactions, db.levelSyncFactions)
+                put(int(TELEPORT_MIN), b.teleportMinSeconds, db.teleportMinSeconds)
+                put(int(TELEPORT_MAX), b.teleportMaxSeconds, db.teleportMaxSeconds)
+                put(float(CITY_CHANCE), b.cityChance, db.cityChance)
             }
         }
 
@@ -185,6 +190,11 @@ class RealmSettingsStore(context: Context) {
                     onlineOfflineRatio = prefs[float(PERIODIC_RATIO)] ?: db.onlineOfflineRatio,
                     smartScaleFloorMs = prefs[int(SMART_SCALE_FLOOR)] ?: db.smartScaleFloorMs,
                     smartScaleCeilingMs = prefs[int(SMART_SCALE_CEILING)] ?: db.smartScaleCeilingMs,
+                    levelNeighborShare = prefs[float(DYNAMIC_LEVELS_NEIGHBORS)] ?: db.levelNeighborShare,
+                    levelSyncFactions = prefs[bool(DYNAMIC_LEVELS_SYNC_FACTIONS)] ?: db.levelSyncFactions,
+                    teleportMinSeconds = prefs[int(TELEPORT_MIN)] ?: db.teleportMinSeconds,
+                    teleportMaxSeconds = prefs[int(TELEPORT_MAX)] ?: db.teleportMaxSeconds,
+                    cityChance = prefs[float(CITY_CHANCE)] ?: db.cityChance,
                 )
             }
             return RealmSettings(world, bots)

@@ -51,8 +51,15 @@ data class PlayerbotsConfig(
     val summonWhenGroup: Boolean = true,
     /** Weights bot levels toward the brackets real players are in, keeping some at every level. */
     val dynamicLevelDistribution: Boolean = false,
-    /** How strongly [dynamicLevelDistribution] favours players' brackets; 1 is mild. */
+    /** How strongly [dynamicLevelDistribution] favours players' brackets; 1 is mild, 10-15 solo. */
     val levelDistributionWeight: Float = 1.0f,
+    /**
+     * Share of that boost the brackets just above and below also get (patch 0002), so bots are
+     * around the player's level, some higher and some lower; 0 boosts only the player's bracket.
+     */
+    val levelNeighborShare: Float = 0.0f,
+    /** Players of both factions shape both factions' bot levels (needs identical brackets). */
+    val levelSyncFactions: Boolean = false,
     /** Rotates a larger bot pool online and offline: more faces, same number online at once. */
     val periodicOnlineOffline: Boolean = false,
     /** Bot pool size as a multiple of the online bot count, for [periodicOnlineOffline]. */
@@ -63,6 +70,11 @@ data class PlayerbotsConfig(
      */
     val smartScaleFloorMs: Int = 50,
     val smartScaleCeilingMs: Int = 200,
+    /** Seconds between a bot's random teleports; shorter keeps bots following players around. */
+    val teleportMinSeconds: Int = 3600,
+    val teleportMaxSeconds: Int = 18000,
+    /** Chance (0-1) that a teleporting bot of level 10+ goes to a capital's banker instead. */
+    val cityChance: Float = 0.25f,
 ) {
     fun overrides(): Map<String, String> = mapOf(
         RANDOM_BOT_AUTOLOGIN to flag(randomBotsEnabled),
@@ -92,6 +104,11 @@ data class PlayerbotsConfig(
         PERIODIC_RATIO to onlineOfflineRatio.toString(),
         SMART_SCALE_FLOOR to smartScaleFloorMs.toString(),
         SMART_SCALE_CEILING to smartScaleCeilingMs.toString(),
+        DYNAMIC_LEVELS_NEIGHBORS to levelNeighborShare.toString(),
+        DYNAMIC_LEVELS_SYNC_FACTIONS to flag(levelSyncFactions),
+        TELEPORT_MIN to teleportMinSeconds.toString(),
+        TELEPORT_MAX to teleportMaxSeconds.toString(),
+        CITY_CHANCE to cityChance.toString(),
     )
 
     /** Out-of-range or contradictory values, named by conf key; empty when valid. */
@@ -113,11 +130,16 @@ data class PlayerbotsConfig(
         check(GUILD_COUNT, guilds, GUILD_COUNT_RANGE)
         check(ADD_CLASS_ACCOUNTS, addClassAccounts, ADD_CLASS_ACCOUNTS_RANGE)
         check(MAX_ADDED_BOTS, maxAddedBots, MAX_ADDED_BOTS_RANGE)
-        if (levelDistributionWeight !in WEIGHT_RANGE) add("$DYNAMIC_LEVELS_WEIGHT must be 0-10")
+        if (levelDistributionWeight !in WEIGHT_RANGE) add("$DYNAMIC_LEVELS_WEIGHT must be 0-20")
         if (onlineOfflineRatio !in RATIO_RANGE) add("$PERIODIC_RATIO must be 1-10")
         check(SMART_SCALE_FLOOR, smartScaleFloorMs, UPDATE_MS_RANGE)
         check(SMART_SCALE_CEILING, smartScaleCeilingMs, UPDATE_MS_RANGE)
         if (smartScaleFloorMs >= smartScaleCeilingMs) add("$SMART_SCALE_FLOOR must be below $SMART_SCALE_CEILING")
+        if (levelNeighborShare !in SHARE_RANGE) add("$DYNAMIC_LEVELS_NEIGHBORS must be 0-1")
+        check(TELEPORT_MIN, teleportMinSeconds, TELEPORT_RANGE)
+        check(TELEPORT_MAX, teleportMaxSeconds, TELEPORT_RANGE)
+        if (teleportMinSeconds > teleportMaxSeconds) add("$TELEPORT_MIN must not exceed $TELEPORT_MAX")
+        if (cityChance !in SHARE_RANGE) add("$CITY_CHANCE must be 0-1")
     }
 
     companion object {
@@ -147,6 +169,11 @@ data class PlayerbotsConfig(
         const val PERIODIC_RATIO = "Playerbots.PeriodicOnlineOfflineRatio"
         const val SMART_SCALE_FLOOR = "Playerbots.botActiveAloneSmartScaleDiffLimitfloor"
         const val SMART_SCALE_CEILING = "Playerbots.botActiveAloneSmartScaleDiffLimitCeiling"
+        const val DYNAMIC_LEVELS_NEIGHBORS = "Playerbots.LevelBrackets.Dynamic.NeighborShare"
+        const val DYNAMIC_LEVELS_SYNC_FACTIONS = "Playerbots.LevelBrackets.Dynamic.SyncFactions"
+        const val TELEPORT_MIN = "Playerbots.MinRandomBotTeleportInterval"
+        const val TELEPORT_MAX = "Playerbots.MaxRandomBotTeleportInterval"
+        const val CITY_CHANCE = "Playerbots.ProbTeleToBankers"
 
         // The dist documents no upper bounds for these; the caps keep typos from asking a
         // phone for thousands of bots. 500 is the module's own default population.
@@ -157,9 +184,12 @@ data class PlayerbotsConfig(
         val GUILD_COUNT_RANGE = 0..50
         val ADD_CLASS_ACCOUNTS_RANGE = 0..50
         val MAX_ADDED_BOTS_RANGE = 1..40
-        val WEIGHT_RANGE = 0f..10f
+        val WEIGHT_RANGE = 0f..20f
         val RATIO_RANGE = 1f..10f
         val UPDATE_MS_RANGE = 10..1000
+        val SHARE_RANGE = 0f..1f
+        /** One minute to one day. */
+        val TELEPORT_RANGE = 60..86_400
 
         /** The dist's default RandomBotMaps: the four continents, by map id. */
         val MAPS = mapOf(0 to "Eastern Kingdoms", 1 to "Kalimdor", 530 to "Outland", 571 to "Northrend")
@@ -169,6 +199,7 @@ data class PlayerbotsConfig(
          * core never frees the grids bots load). Bots of the player's faction and level gather in
          * their zone; others keep every level and both factions present, for higher-level
          * encounters and PvP. A doubled pool rotates online for variety at the same memory cost.
+ * Bots that do not fit the player's zone prefer the player's continent (patch 0003).
          */
         val MODEST = PlayerbotsConfig(
             minRandomBots = 60,
@@ -180,8 +211,16 @@ data class PlayerbotsConfig(
             addClassAccounts = 1,
             concentrateInPlayerZone = true,
             disabledWithoutRealPlayer = true,
+            // Around the player's level: about a third of bots in their bracket, a fifth in each
+            // neighbouring one, the rest spread over 1-80 for higher-level encounters.
             dynamicLevelDistribution = true,
-            levelDistributionWeight = 3.0f,
+            levelDistributionWeight = 12.0f,
+            levelNeighborShare = 0.5f,
+            levelSyncFactions = true,
+            // Re-teleport every 20-60 minutes so fitting bots follow the player between zones.
+            teleportMinSeconds = 1200,
+            teleportMaxSeconds = 3600,
+            cityChance = 0.15f,
             periodicOnlineOffline = true,
             onlineOfflineRatio = 2.0f,
             // A phone's update loop is slower than a server's: start shedding idle bots earlier.

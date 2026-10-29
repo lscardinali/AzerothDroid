@@ -49,6 +49,7 @@ import com.lscardinali.pocketwow.realm.RealmSettings
 import com.lscardinali.pocketwow.realm.RealmSettingsStore
 import com.lscardinali.pocketwow.realm.WorldConfig
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /**
  * Edits [RealmSettings] as a draft and saves it to [RealmSettingsStore]. The world server
@@ -109,6 +110,7 @@ fun SettingsScreen(modifier: Modifier, primaryFocus: FocusRequester, realmRunnin
             Column(Modifier.focusRequester(primaryFocus), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 key(generation) {
                     BotsCard(current.bots, unparsed) { draft = current.copy(bots = it) }
+                    BotWorldCard(current.bots, unparsed) { draft = current.copy(bots = it) }
                     RatesCard(current.world, unparsed) { draft = current.copy(world = it) }
                     WorldCard(current.world, unparsed) { draft = current.copy(world = it) }
                 }
@@ -209,6 +211,59 @@ private fun BotsCard(bots: PlayerbotsConfig, unparsed: SnapshotStateMap<String, 
     }
 }
 
+/** Where bots are and how levels spread around the player: what makes the world feel lived in. */
+@Composable
+private fun BotWorldCard(bots: PlayerbotsConfig, unparsed: SnapshotStateMap<String, Boolean>, onChange: (PlayerbotsConfig) -> Unit) {
+    SettingsCard("Bots around you") {
+        Toggle(
+            "Follow players' levels", "Bot levels lean toward the brackets real players are in",
+            bots.dynamicLevelDistribution,
+        ) { onChange(bots.copy(dynamicLevelDistribution = it)) }
+        FloatSetting(
+            "Pull toward your level", bots.levelDistributionWeight, PlayerbotsConfig.WEIGHT_RANGE, unparsed,
+            note = "1 is mild; 10-15 puts about a third of bots at your level",
+        ) { onChange(bots.copy(levelDistributionWeight = it)) }
+        FloatSetting(
+            "Spread to nearby levels", bots.levelNeighborShare, PlayerbotsConfig.SHARE_RANGE, unparsed,
+            note = "Share of that pull the levels just above and below also get; 0.5 = half",
+        ) { onChange(bots.copy(levelNeighborShare = it)) }
+        Toggle(
+            "Both factions follow all players", "Your level shapes enemy bots' levels too, for PvP",
+            bots.levelSyncFactions,
+        ) { onChange(bots.copy(levelSyncFactions = it)) }
+        IntSetting(
+            "Shortest time between teleports", bots.teleportMinSeconds / 60, minutes(PlayerbotsConfig.TELEPORT_RANGE),
+            "minutes", unparsed, note = "Shorter lets bots follow you between zones", memoryHeavy = true,
+        ) { onChange(bots.copy(teleportMinSeconds = it * 60)) }
+        IntSetting(
+            "Longest time between teleports", bots.teleportMaxSeconds / 60, minutes(PlayerbotsConfig.TELEPORT_RANGE),
+            "minutes", unparsed, memoryHeavy = true,
+        ) { onChange(bots.copy(teleportMaxSeconds = it * 60)) }
+        IntSetting(
+            "Teleports to a capital city", (bots.cityChance * 100).roundToInt(), PlayerbotsConfig.PERCENT_RANGE, "%",
+            unparsed, note = "Bots of level 10+ that go to a banker instead of a questing zone",
+        ) { onChange(bots.copy(cityChance = it / 100f)) }
+        Toggle(
+            "Rotate bots online and offline", "A pool larger than the online count takes turns: new faces, same memory",
+            bots.periodicOnlineOffline,
+        ) { onChange(bots.copy(periodicOnlineOffline = it)) }
+        FloatSetting(
+            "Pool size", bots.onlineOfflineRatio, PlayerbotsConfig.RATIO_RANGE, unparsed,
+            note = "Times the online count; more characters to create on first start",
+        ) { onChange(bots.copy(onlineOfflineRatio = it)) }
+        IntSetting(
+            "Start pausing far bots at", bots.smartScaleFloorMs, PlayerbotsConfig.UPDATE_MS_RANGE, "ms update time",
+            unparsed, note = "Adaptive load: idle bots far from you pause as the server slows down",
+        ) { onChange(bots.copy(smartScaleFloorMs = it)) }
+        IntSetting(
+            "Pause all far bots at", bots.smartScaleCeilingMs, PlayerbotsConfig.UPDATE_MS_RANGE, "ms update time",
+            unparsed, note = "Bots near you always stay active",
+        ) { onChange(bots.copy(smartScaleCeilingMs = it)) }
+    }
+}
+
+private fun minutes(seconds: IntRange) = (seconds.first / 60)..(seconds.last / 60)
+
 @Composable
 private fun RatesCard(world: WorldConfig, unparsed: SnapshotStateMap<String, Boolean>, onChange: (WorldConfig) -> Unit) {
     SettingsCard("Rates") {
@@ -305,6 +360,22 @@ private fun RateSetting(
         onChange = onChange,
     )
 }
+
+/** A decimal value within [range]. */
+@Composable
+private fun FloatSetting(
+    label: String,
+    value: Float,
+    range: ClosedFloatingPointRange<Float>,
+    unparsed: SnapshotStateMap<String, Boolean>,
+    note: String? = null,
+    onChange: (Float) -> Unit,
+) = NumberSetting(
+    label, rate(value), "${rate(range.start)}-${rate(range.endInclusive)}", KeyboardType.Decimal, unparsed, note,
+    memoryHeavy = false,
+    parse = { text -> text.trim().replace(',', '.').toFloatOrNull()?.takeIf { it in range } },
+    onChange = onChange,
+)
 
 /**
  * A text field that pushes only parsed, in-range values to [onChange]; anything else is

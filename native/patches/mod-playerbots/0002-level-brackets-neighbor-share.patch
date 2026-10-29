@@ -1,0 +1,90 @@
+diff --git a/conf/playerbots.conf.dist b/conf/playerbots.conf.dist
+index 5fa02b7..3e037ab 100644
+--- a/conf/playerbots.conf.dist
++++ b/conf/playerbots.conf.dist
+@@ -944,6 +944,12 @@ Playerbots.LevelBrackets.Dynamic.UseDynamicDistribution = 0
+ # Default: 1.0
+ Playerbots.LevelBrackets.Dynamic.RealPlayerWeight = 1.0
+ 
++# Share of a bracket's real-player boost that the brackets just above and below it also get, so
++# bots gather around players' levels (some higher, some lower) rather than in one bracket.
++# 0.0 = only the players' own bracket is boosted; 0.5 = neighbours get half its boost.
++# Default: 0.0
++Playerbots.LevelBrackets.Dynamic.NeighborShare = 0.0
++
+ # If enabled, both Alliance and Horde must have identical bracket definitions (same number, same
+ # level bounds). All real players (regardless of faction) influence the dynamic distribution for
+ # both factions.
+diff --git a/src/Bot/RandomBotLevelMgr.cpp b/src/Bot/RandomBotLevelMgr.cpp
+index d3ecf11..fd0bf9f 100644
+--- a/src/Bot/RandomBotLevelMgr.cpp
++++ b/src/Bot/RandomBotLevelMgr.cpp
+@@ -557,6 +557,33 @@ void RandomBotLevelMgr::ProcessFactionDistribution(TeamId team, uint32 totalBots
+     }
+ }
+ 
++namespace
++{
++// Gives each bracket a share of its neighbours' real-player boost (weight above baseline), so
++// bots gather around players' levels, some above and some below, instead of in one bracket.
++// Disabled brackets (weight 0) stay disabled.
++void SpreadBoostToNeighbors(std::vector<float>& weights, float baseline, float share)
++{
++    if (share <= 0.0f)
++        return;
++
++    std::vector<float> boosts(weights.size(), 0.0f);
++    for (size_t i = 0; i < weights.size(); ++i)
++        if (weights[i] > 0.0f)
++            boosts[i] = std::max(0.0f, weights[i] - baseline);
++
++    for (size_t i = 0; i < weights.size(); ++i)
++    {
++        if (weights[i] <= 0.0f)
++            continue;
++        if (i > 0)
++            weights[i] += share * boosts[i - 1];
++        if (i + 1 < weights.size())
++            weights[i] += share * boosts[i + 1];
++    }
++}
++}
++
+ // Runs the periodic bot level distribution pass: optionally recalculates dynamic bracket
+ // percentages based on the real-player census, then flags surplus bots in over-populated brackets
+ // for a pending reset into under-populated ones (per faction, via ProcessFactionDistribution).
+@@ -636,6 +663,9 @@ void RandomBotLevelMgr::RunLevelBracketsDistribution()
+             }
+         }
+ 
++        SpreadBoostToNeighbors(allianceWeights, baseline, sPlayerbotAIConfig.LevelBracketsNeighborShare);
++        SpreadBoostToNeighbors(hordeWeights, baseline, sPlayerbotAIConfig.LevelBracketsNeighborShare);
++
+         ApplyBracketWeights(_allianceRanges, allianceWeights);
+         ApplyBracketWeights(_hordeRanges, hordeWeights);
+ 
+diff --git a/src/PlayerbotAIConfig.cpp b/src/PlayerbotAIConfig.cpp
+index 4653b64..b9cf42c 100644
+--- a/src/PlayerbotAIConfig.cpp
++++ b/src/PlayerbotAIConfig.cpp
+@@ -821,6 +821,8 @@ void PlayerbotAIConfig::LoadRandomBotLevelConfig()
+         sConfigMgr->GetOption<bool>("Playerbots.LevelBrackets.Dynamic.UseDynamicDistribution", false);
+     LevelBracketsRealPlayerWeight =
+         sConfigMgr->GetOption<float>("Playerbots.LevelBrackets.Dynamic.RealPlayerWeight", 1.0f);
++    LevelBracketsNeighborShare =
++        sConfigMgr->GetOption<float>("Playerbots.LevelBrackets.Dynamic.NeighborShare", 0.0f);
+     LevelBracketsSyncFactions = sConfigMgr->GetOption<bool>("Playerbots.LevelBrackets.Dynamic.SyncFactions", false);
+     LevelBracketsIgnoreFriendListed = sConfigMgr->GetOption<bool>("Playerbots.LevelBrackets.IgnoreFriendListed", true);
+     LevelBracketsFlaggedProcessLimit =
+diff --git a/src/PlayerbotAIConfig.h b/src/PlayerbotAIConfig.h
+index 5e89efa..84b0413 100644
+--- a/src/PlayerbotAIConfig.h
++++ b/src/PlayerbotAIConfig.h
+@@ -503,6 +503,7 @@ public:
+     std::vector<LevelBracketConfig> LevelBracketsHorde;
+     bool LevelBracketsDynamicDistribution;
+     float LevelBracketsRealPlayerWeight;
++    float LevelBracketsNeighborShare;
+     bool LevelBracketsSyncFactions;
+ 
+     // Random bot level reset (reset random bots reaching max level). See RandomBotLevelMgr.
