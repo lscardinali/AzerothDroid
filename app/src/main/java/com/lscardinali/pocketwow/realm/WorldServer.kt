@@ -20,7 +20,8 @@ import java.util.concurrent.TimeUnit
  */
 class WorldServer(context: Context, private val native: NativeRuntime, private val dataPack: DataPack) {
 
-    enum class State { STOPPED, STARTING, RUNNING, STOPPING, FAILED }
+    /** PAUSED: the process is stopped with SIGSTOP (no CPU at all) until [resume]. */
+    enum class State { STOPPED, STARTING, RUNNING, PAUSED, STOPPING, FAILED }
 
     @Volatile var state = State.STOPPED
         private set
@@ -76,9 +77,29 @@ class WorldServer(context: Context, private val native: NativeRuntime, private v
         }
     }
 
+    /** Freezes the running server; the kernel still queues new connections for [resume]. */
+    @Synchronized
+    fun pause() {
+        if (state != State.RUNNING) return
+        val pid = NativeRuntime.readPid(pidFile)?.takeIf { NativeRuntime.isRunning(it, EXECUTABLE) } ?: return
+        android.os.Process.sendSignal(pid, SIGSTOP)
+        state = State.PAUSED
+        Log.i(TAG, "worldserver paused")
+    }
+
+    @Synchronized
+    fun resume() {
+        if (state != State.PAUSED) return
+        NativeRuntime.readPid(pidFile)?.let { android.os.Process.sendSignal(it, SIGCONT) }
+        state = State.RUNNING
+        Log.i(TAG, "worldserver resumed")
+    }
+
     /** SIGTERM makes worldserver save online players and shut down cleanly. */
     fun stop() {
         if (state == State.STOPPED) return
+        // A stopped process holds SIGTERM until it continues.
+        resume()
         state = State.STOPPING
         terminate()
         state = State.STOPPED
@@ -166,6 +187,8 @@ class WorldServer(context: Context, private val native: NativeRuntime, private v
 
     companion object {
         private const val TAG = "WorldServer"
+        private const val SIGCONT = 18
+        private const val SIGSTOP = 19
         private const val COMPONENT = "worldserver"
         private const val EXECUTABLE = "libworldserver.so"
         const val PORT = 8085

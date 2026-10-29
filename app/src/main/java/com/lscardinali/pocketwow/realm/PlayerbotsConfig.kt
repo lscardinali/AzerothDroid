@@ -98,6 +98,9 @@ data class PlayerbotsConfig(
         ALT_BOT_AUTOLOGIN to flag(altBotAutologin),
         INVITE_PLAYERS to flag(invitePlayers),
         SUMMON_WHEN_GROUP to flag(summonWhenGroup),
+        // The bracket system (rebalancing bot levels every few minutes) is off by default and
+        // the dynamic weighting does nothing without it.
+        LEVEL_BRACKETS to flag(dynamicLevelDistribution),
         DYNAMIC_LEVELS to flag(dynamicLevelDistribution),
         DYNAMIC_LEVELS_WEIGHT to levelDistributionWeight.toString(),
         PERIODIC_ONLINE to flag(periodicOnlineOffline),
@@ -163,6 +166,7 @@ data class PlayerbotsConfig(
         const val ALT_BOT_AUTOLOGIN = "Playerbots.BotAutologin"
         const val INVITE_PLAYERS = "Playerbots.RandomBotInvitePlayer"
         const val SUMMON_WHEN_GROUP = "Playerbots.SummonWhenGroup"
+        const val LEVEL_BRACKETS = "Playerbots.LevelBrackets.Enabled"
         const val DYNAMIC_LEVELS = "Playerbots.LevelBrackets.Dynamic.UseDynamicDistribution"
         const val DYNAMIC_LEVELS_WEIGHT = "Playerbots.LevelBrackets.Dynamic.RealPlayerWeight"
         const val PERIODIC_ONLINE = "Playerbots.EnablePeriodicOnlineOffline"

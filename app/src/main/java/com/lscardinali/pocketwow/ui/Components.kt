@@ -115,6 +115,8 @@ enum class Health(val color: Color, val label: String) {
     Down(Faded, "Offline"),
     Broken(Blood, "Failed"),
     Stopping(Ember, "Stopping"),
+    /** World server frozen until someone logs in. */
+    Sleeping(Frost, "Sleeping"),
     ;
 
     companion object {
@@ -123,6 +125,7 @@ enum class Health(val color: Color, val label: String) {
             "RUNNING" -> Up
             "STARTING" -> Busy
             "STOPPING" -> Stopping
+            "PAUSED" -> Sleeping
             "FAILED" -> Broken
             else -> Down
         }

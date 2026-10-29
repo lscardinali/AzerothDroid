@@ -60,6 +60,7 @@ class RealmSettingsTest {
             "Playerbots.AddClassAccountPoolSize" to "1",
             "Playerbots.RandomBotConcentrateInPlayerZone" to "1",
             "Playerbots.DisabledWithoutRealPlayer" to "1",
+            "Playerbots.LevelBrackets.Enabled" to "1",
             "Playerbots.LevelBrackets.Dynamic.UseDynamicDistribution" to "1",
             "Playerbots.LevelBrackets.Dynamic.RealPlayerWeight" to "12.0",
             "Playerbots.LevelBrackets.Dynamic.NeighborShare" to "0.5",

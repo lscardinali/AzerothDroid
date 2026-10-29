@@ -127,6 +127,8 @@ class MariaDbServer(context: Context, private val native: NativeRuntime) {
             character-set-server=utf8mb4
             collation-server=utf8mb4_unicode_ci
             max-connections=50
+            # The world server keeps its connections idle while paused; do not drop them.
+            wait-timeout=604800
             performance-schema=OFF
             innodb-buffer-pool-size=48M
             innodb-log-file-size=48M

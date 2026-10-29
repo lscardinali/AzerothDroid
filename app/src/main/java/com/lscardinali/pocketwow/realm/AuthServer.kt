@@ -109,7 +109,10 @@ class AuthServer(context: Context, private val native: NativeRuntime, private va
             // data/sql/archive is not bundled; drop its rows from the updates table.
             "Updates.CleanDeadRefMaxCount" to "-1",
         )
-        configFile.writeText(applyOverrides(File(root, "$COMPONENT.conf.dist").readText(), overrides))
+        // Successful logins are logged at debug level only; the app watches for them in
+        // Auth.log to wake a paused world server ([LOGIN_MARKER]).
+        val additions = mapOf("Logger.server.authserver" to "5,Console Auth")
+        configFile.writeText(applyOverrides(File(root, "$COMPONENT.conf.dist").readText(), overrides, additions))
     }
 
     private fun awaitPort() {
@@ -138,6 +141,8 @@ class AuthServer(context: Context, private val native: NativeRuntime, private va
         private const val COMPONENT = "authserver"
         private const val EXECUTABLE = "libauthserver.so"
         const val PORT = 3724
+        /** Auth.log text of a successful login (AuthSession, debug level). */
+        const val LOGIN_MARKER = "successfully authenticated"
 
         /** Replaces `Key = value` lines of an AzerothCore .conf.dist; quotes string values. */
         /**

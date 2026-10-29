@@ -83,6 +83,7 @@ private fun RealmPanel(
         "FAILED" in states -> Health.Broken
         "STOPPING" in states -> Health.Stopping
         states.last() == "RUNNING" -> Health.Up
+        states.last() == "PAUSED" -> Health.Sleeping
         else -> Health.Busy
     }
     Panel {
@@ -95,6 +96,7 @@ private fun RealmPanel(
                         Health.Busy -> "Starting ${starting(states)}: a minute or two, longer on the very first start."
                         Health.Broken -> "A server failed; see below and the Logs tab."
                         Health.Stopping -> "Saving players and shutting down."
+                        Health.Sleeping -> "Sleeping: nobody has played for a while. Logging in wakes it."
                         Health.Down -> if (clientDataReady) "Stopped." else "Install the client data first."
                     },
                     style = MaterialTheme.typography.bodyMedium,

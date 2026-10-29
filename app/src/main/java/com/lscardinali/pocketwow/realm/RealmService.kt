@@ -27,9 +27,10 @@ import java.util.concurrent.Executors
  * mod-playerbots), started in that order. It runs in the app's own process, so the UI reads
  * its state directly ([currentStatus]) and the device pays for one Android runtime, not two.
  *
- * No wake lock is held: when the device sleeps the CPU suspends and every process
- * freezes, then continues where it left off on wake. The foreground state is what keeps
- * Android from killing the stack while the WoW client is in front.
+ * Battery: [IdleGuard] holds a wake lock only while a real player is connected, and freezes
+ * the world server when nobody has played for a while. Otherwise, when the device sleeps the
+ * CPU suspends and every process freezes, then continues where it left off on wake. The
+ * foreground state is what keeps Android from killing the stack while the WoW client is in front.
  *
  * Shutdown: Stop, service destruction and device power-off stop the stack in order (the world
  * server saves and kicks every player on SIGTERM). The low-memory killer gives no warning, so
@@ -43,6 +44,7 @@ class RealmService : Service() {
     private lateinit var world: WorldServer
     private lateinit var dataPack: DataPack
     private lateinit var console: WorldConsole
+    @Volatile private var idleGuard: IdleGuard? = null
     /** `saveall` runs here, so a slow start or stop on [lifecycle] cannot delay it. */
     private val saves = Executors.newSingleThreadExecutor()
     @Volatile private var lastSaveAt = 0L
@@ -115,7 +117,15 @@ class RealmService : Service() {
             publishRealmAddress()
             runCatching { console.prepare(Accounts(database)) }
                 .onFailure { Log.w(TAG, "Could not prepare the console account", it) }
-            world.start(RealmSettingsStore(this).load())
+            val settings = RealmSettingsStore(this).load()
+            world.start(settings)
+            if (world.state == WorldServer.State.RUNNING) {
+                idleGuard = IdleGuard(
+                    this, world, console, auth.logFile,
+                    // Without that, bots are meant to live on with nobody playing.
+                    pauseWhenIdle = settings.bots.disabledWithoutRealPlayer,
+                ).also { it.start() }
+            }
         }
     }
 
@@ -156,6 +166,8 @@ class RealmService : Service() {
 
     /** Reverse start order: servers first, so their last writes reach the database. */
     private fun stopStack() {
+        idleGuard?.stop()
+        idleGuard = null
         world.stop()
         auth.stop()
         database.stop()
