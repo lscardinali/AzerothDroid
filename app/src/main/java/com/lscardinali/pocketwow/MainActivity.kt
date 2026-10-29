@@ -4,6 +4,7 @@ import android.Manifest
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -33,6 +34,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -43,6 +45,7 @@ import com.lscardinali.pocketwow.realm.RealmService
 import com.lscardinali.pocketwow.realm.SystemStats
 import com.lscardinali.pocketwow.setup.ClientDataInstaller
 import com.lscardinali.pocketwow.setup.SetupService
+import com.lscardinali.pocketwow.ui.SettingsScreen
 import com.lscardinali.pocketwow.ui.theme.PocketWowTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -62,13 +65,25 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             PocketWowTheme {
+                // Two screens do not justify a navigation library; back returns home.
+                var settings by rememberSaveable { mutableStateOf(false) }
+                BackHandler(enabled = settings) { settings = false }
                 Scaffold { padding ->
-                    HomeScreen(
-                        modifier = Modifier.padding(padding),
-                        onStart = { RealmService.start(this) },
-                        onStop = { RealmService.stop(this) },
-                        onSetup = { SetupService.start(this) },
-                    )
+                    if (settings) {
+                        SettingsScreen(
+                            modifier = Modifier.padding(padding),
+                            realmRunning = RealmService.running,
+                            onBack = { settings = false },
+                        )
+                    } else {
+                        HomeScreen(
+                            modifier = Modifier.padding(padding),
+                            onStart = { RealmService.start(this) },
+                            onStop = { RealmService.stop(this) },
+                            onSetup = { SetupService.start(this) },
+                            onSettings = { settings = true },
+                        )
+                    }
                 }
             }
         }
@@ -76,7 +91,13 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun HomeScreen(modifier: Modifier, onStart: () -> Unit, onStop: () -> Unit, onSetup: () -> Unit) {
+private fun HomeScreen(
+    modifier: Modifier,
+    onStart: () -> Unit,
+    onStop: () -> Unit,
+    onSetup: () -> Unit,
+    onSettings: () -> Unit,
+) {
     val dataPack = DataPack(LocalContext.current)
     val setup by ClientDataInstaller.progress.collectAsState()
     // Re-read from disk when setup finishes; also covers data pushed over adb.
@@ -111,6 +132,7 @@ private fun HomeScreen(modifier: Modifier, onStart: () -> Unit, onStop: () -> Un
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = onStart, enabled = clientDataReady) { Text("Start realm") }
             OutlinedButton(onClick = onStop) { Text("Stop") }
+            OutlinedButton(onClick = onSettings) { Text("Settings") }
         }
 
         InfoCard("Service") {

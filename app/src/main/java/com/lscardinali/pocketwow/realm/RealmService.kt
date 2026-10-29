@@ -115,7 +115,7 @@ class RealmService : Service() {
             publishRealmAddress()
             runCatching { console.prepare(Accounts(database)) }
                 .onFailure { Log.w(TAG, "Could not prepare the console account", it) }
-            world.start(PlayerbotsConfig.MODEST)
+            world.start(RealmSettingsStore(this).load())
         }
     }
 
@@ -244,6 +244,9 @@ class RealmService : Service() {
         private const val ACTION_QUICKBOOT_POWEROFF = "android.intent.action.QUICKBOOT_POWEROFF"
         private const val MIN_SAVE_INTERVAL_MS = 60_000L
         @Volatile private var instance: RealmService? = null
+
+        /** Whether the service is up; cheaper than [currentStatus], which samples memory. */
+        val running: Boolean get() = instance != null
 
         /** Status of the running realm, or null when the service is not running. */
         fun currentStatus(): JSONObject? = instance?.status()

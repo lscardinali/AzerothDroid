@@ -40,8 +40,11 @@ class WorldServer(context: Context, private val native: NativeRuntime, private v
 
     private var process: Process? = null
 
-    /** Blocking: requires MariaDB and the data pack. Returns once port 8085 accepts connections. */
-    fun start(bots: PlayerbotsConfig) {
+    /**
+     * Blocking: requires MariaDB and the data pack. Returns once port 8085 accepts connections.
+     * [settings] are written into the .conf files here, so changes apply on the next start.
+     */
+    fun start(settings: RealmSettings) {
         if (state == State.RUNNING || state == State.STARTING) return
         error = null
         state = State.STARTING
@@ -52,7 +55,7 @@ class WorldServer(context: Context, private val native: NativeRuntime, private v
                 if (NativeRuntime.isRunning(it, EXECUTABLE)) Log.w(TAG, "Stopping stale worldserver $it")
                 NativeRuntime.terminate(it, EXECUTABLE, timeoutSec = 60)
             }
-            writeConfig(bots)
+            writeConfig(settings)
             pidFile.delete()
             process = native.command(
                 EXECUTABLE, "-c", configFile.path,
@@ -93,7 +96,7 @@ class WorldServer(context: Context, private val native: NativeRuntime, private v
             .put("port", PORT)
     }
 
-    private fun writeConfig(bots: PlayerbotsConfig) {
+    private fun writeConfig(settings: RealmSettings) {
         listOf(etcDir, File(etcDir, "modules"), runDir, logsDir, File(root, "tmp")).forEach { it.mkdirs() }
         val assets = "$COMPONENT/"
         val worldDist = File(etcDir, "worldserver.conf.dist")
@@ -101,7 +104,8 @@ class WorldServer(context: Context, private val native: NativeRuntime, private v
         native.copyAssets(assets + "worldserver.conf.dist", worldDist)
         native.copyAssets(assets + "playerbots.conf.dist", botsDist)
 
-        val world = mapOf(
+        // Infrastructure last: these are the app's, whatever the settings say.
+        val world = settings.world.overrides() + mapOf(
             "DataDir" to dataPack.clientData.path,
             "SourceDirectory" to dataPack.sourceDirectory.path,
             "LogsDir" to logsDir.path,
@@ -124,8 +128,6 @@ class WorldServer(context: Context, private val native: NativeRuntime, private v
             "Warden.Enabled" to "0",
             // Android can kill the realm without warning; lose at most two minutes of play.
             "PlayerSaveInterval" to "120000",
-            // Bots cannot navigate the battle, and its active objects keep Northrend grids loaded.
-            "Wintergrasp.Enable" to "2",
         )
         val additions = mapOf(
             // Patch 0008: English clients only, skip a few hundred MB of translations.
@@ -135,7 +137,7 @@ class WorldServer(context: Context, private val native: NativeRuntime, private v
         )
         configFile.writeText(AuthServer.applyOverrides(worldDist.readText(), world, additions))
 
-        val botOverrides = bots.overrides() +
+        val botOverrides = settings.bots.overrides() +
             ("PlayerbotsDatabaseInfo" to "127.0.0.1;${MariaDbServer.PORT};acore;acore;acore_playerbots")
         File(etcDir, "modules/playerbots.conf").writeText(AuthServer.applyOverrides(botsDist.readText(), botOverrides))
     }
