@@ -84,7 +84,7 @@ class RealmService : Service() {
             auth.start()
             if (auth.state != AuthServer.State.RUNNING) return@execute
             publishRealmAddress()
-            world.start(PlayerbotsConfig.MODEST)
+            world.start(RealmSettingsStore(this).load())
         }
     }
 
@@ -190,6 +190,9 @@ class RealmService : Service() {
         private const val NOTIFICATION_ID = 1
         private const val ACTION_STOP = "com.lscardinali.pocketwow.STOP"
         @Volatile private var instance: RealmService? = null
+
+        /** Whether the service is up; cheaper than [currentStatus], which samples memory. */
+        val running: Boolean get() = instance != null
 
         /** Status of the running realm, or null when the service is not running. */
         fun currentStatus(): JSONObject? = instance?.status()
