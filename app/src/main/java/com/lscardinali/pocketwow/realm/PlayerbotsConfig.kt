@@ -49,6 +49,20 @@ data class PlayerbotsConfig(
     val invitePlayers: Boolean = false,
     /** Bots are summoned to their master when they accept a group invite. */
     val summonWhenGroup: Boolean = true,
+    /** Weights bot levels toward the brackets real players are in, keeping some at every level. */
+    val dynamicLevelDistribution: Boolean = false,
+    /** How strongly [dynamicLevelDistribution] favours players' brackets; 1 is mild. */
+    val levelDistributionWeight: Float = 1.0f,
+    /** Rotates a larger bot pool online and offline: more faces, same number online at once. */
+    val periodicOnlineOffline: Boolean = false,
+    /** Bot pool size as a multiple of the online bot count, for [periodicOnlineOffline]. */
+    val onlineOfflineRatio: Float = 2.0f,
+    /**
+     * Server update time (ms) at which idle bots start to be paused, and at which all are.
+     * Bots near a real player stay active regardless.
+     */
+    val smartScaleFloorMs: Int = 50,
+    val smartScaleCeilingMs: Int = 200,
 ) {
     fun overrides(): Map<String, String> = mapOf(
         RANDOM_BOT_AUTOLOGIN to flag(randomBotsEnabled),
@@ -72,6 +86,12 @@ data class PlayerbotsConfig(
         ALT_BOT_AUTOLOGIN to flag(altBotAutologin),
         INVITE_PLAYERS to flag(invitePlayers),
         SUMMON_WHEN_GROUP to flag(summonWhenGroup),
+        DYNAMIC_LEVELS to flag(dynamicLevelDistribution),
+        DYNAMIC_LEVELS_WEIGHT to levelDistributionWeight.toString(),
+        PERIODIC_ONLINE to flag(periodicOnlineOffline),
+        PERIODIC_RATIO to onlineOfflineRatio.toString(),
+        SMART_SCALE_FLOOR to smartScaleFloorMs.toString(),
+        SMART_SCALE_CEILING to smartScaleCeilingMs.toString(),
     )
 
     /** Out-of-range or contradictory values, named by conf key; empty when valid. */
@@ -93,6 +113,11 @@ data class PlayerbotsConfig(
         check(GUILD_COUNT, guilds, GUILD_COUNT_RANGE)
         check(ADD_CLASS_ACCOUNTS, addClassAccounts, ADD_CLASS_ACCOUNTS_RANGE)
         check(MAX_ADDED_BOTS, maxAddedBots, MAX_ADDED_BOTS_RANGE)
+        if (levelDistributionWeight !in WEIGHT_RANGE) add("$DYNAMIC_LEVELS_WEIGHT must be 0-10")
+        if (onlineOfflineRatio !in RATIO_RANGE) add("$PERIODIC_RATIO must be 1-10")
+        check(SMART_SCALE_FLOOR, smartScaleFloorMs, UPDATE_MS_RANGE)
+        check(SMART_SCALE_CEILING, smartScaleCeilingMs, UPDATE_MS_RANGE)
+        if (smartScaleFloorMs >= smartScaleCeilingMs) add("$SMART_SCALE_FLOOR must be below $SMART_SCALE_CEILING")
     }
 
     companion object {
@@ -116,6 +141,12 @@ data class PlayerbotsConfig(
         const val ALT_BOT_AUTOLOGIN = "Playerbots.BotAutologin"
         const val INVITE_PLAYERS = "Playerbots.RandomBotInvitePlayer"
         const val SUMMON_WHEN_GROUP = "Playerbots.SummonWhenGroup"
+        const val DYNAMIC_LEVELS = "Playerbots.LevelBrackets.Dynamic.UseDynamicDistribution"
+        const val DYNAMIC_LEVELS_WEIGHT = "Playerbots.LevelBrackets.Dynamic.RealPlayerWeight"
+        const val PERIODIC_ONLINE = "Playerbots.EnablePeriodicOnlineOffline"
+        const val PERIODIC_RATIO = "Playerbots.PeriodicOnlineOfflineRatio"
+        const val SMART_SCALE_FLOOR = "Playerbots.botActiveAloneSmartScaleDiffLimitfloor"
+        const val SMART_SCALE_CEILING = "Playerbots.botActiveAloneSmartScaleDiffLimitCeiling"
 
         // The dist documents no upper bounds for these; the caps keep typos from asking a
         // phone for thousands of bots. 500 is the module's own default population.
@@ -126,23 +157,36 @@ data class PlayerbotsConfig(
         val GUILD_COUNT_RANGE = 0..50
         val ADD_CLASS_ACCOUNTS_RANGE = 0..50
         val MAX_ADDED_BOTS_RANGE = 1..40
+        val WEIGHT_RANGE = 0f..10f
+        val RATIO_RANGE = 1f..10f
+        val UPDATE_MS_RANGE = 10..1000
 
         /** The dist's default RandomBotMaps: the four continents, by map id. */
         val MAPS = mapOf(0 to "Eastern Kingdoms", 1 to "Kalimdor", 530 to "Outland", 571 to "Northrend")
 
+        /**
+         * A living world sized for a 3 GB phone (measured: about 12 MB per online bot, and this
+         * core never frees the grids bots load). Bots of the player's faction and level gather in
+         * their zone; others keep every level and both factions present, for higher-level
+         * encounters and PvP. A doubled pool rotates online for variety at the same memory cost.
+         */
         val MODEST = PlayerbotsConfig(
-            minRandomBots = 10,
-            maxRandomBots = 10,
-            botsPerInterval = 5,
-            activeAlonePercent = 5,
-            joinBattlegrounds = false,
-            guilds = 0,
+            minRandomBots = 60,
+            maxRandomBots = 60,
+            botsPerInterval = 10,
+            activeAlonePercent = 10,
+            joinBattlegrounds = true,
+            guilds = 5,
             addClassAccounts = 1,
-            // Bots in the player's zone at their level, and only while someone plays: bots
-            // roaming the world load grids everywhere, and loaded grids are never freed.
-            syncLevelWithPlayers = true,
             concentrateInPlayerZone = true,
             disabledWithoutRealPlayer = true,
+            dynamicLevelDistribution = true,
+            levelDistributionWeight = 3.0f,
+            periodicOnlineOffline = true,
+            onlineOfflineRatio = 2.0f,
+            // A phone's update loop is slower than a server's: start shedding idle bots earlier.
+            smartScaleFloorMs = 30,
+            smartScaleCeilingMs = 120,
         )
 
         private fun flag(on: Boolean) = if (on) "1" else "0"

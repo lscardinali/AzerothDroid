@@ -118,6 +118,12 @@ class RealmSettingsStore(context: Context) {
                 put(bool(ALT_BOT_AUTOLOGIN), b.altBotAutologin, db.altBotAutologin)
                 put(bool(INVITE_PLAYERS), b.invitePlayers, db.invitePlayers)
                 put(bool(SUMMON_WHEN_GROUP), b.summonWhenGroup, db.summonWhenGroup)
+                put(bool(DYNAMIC_LEVELS), b.dynamicLevelDistribution, db.dynamicLevelDistribution)
+                put(float(DYNAMIC_LEVELS_WEIGHT), b.levelDistributionWeight, db.levelDistributionWeight)
+                put(bool(PERIODIC_ONLINE), b.periodicOnlineOffline, db.periodicOnlineOffline)
+                put(float(PERIODIC_RATIO), b.onlineOfflineRatio, db.onlineOfflineRatio)
+                put(int(SMART_SCALE_FLOOR), b.smartScaleFloorMs, db.smartScaleFloorMs)
+                put(int(SMART_SCALE_CEILING), b.smartScaleCeilingMs, db.smartScaleCeilingMs)
             }
         }
 
@@ -173,6 +179,12 @@ class RealmSettingsStore(context: Context) {
                     altBotAutologin = prefs[bool(ALT_BOT_AUTOLOGIN)] ?: db.altBotAutologin,
                     invitePlayers = prefs[bool(INVITE_PLAYERS)] ?: db.invitePlayers,
                     summonWhenGroup = prefs[bool(SUMMON_WHEN_GROUP)] ?: db.summonWhenGroup,
+                    dynamicLevelDistribution = prefs[bool(DYNAMIC_LEVELS)] ?: db.dynamicLevelDistribution,
+                    levelDistributionWeight = prefs[float(DYNAMIC_LEVELS_WEIGHT)] ?: db.levelDistributionWeight,
+                    periodicOnlineOffline = prefs[bool(PERIODIC_ONLINE)] ?: db.periodicOnlineOffline,
+                    onlineOfflineRatio = prefs[float(PERIODIC_RATIO)] ?: db.onlineOfflineRatio,
+                    smartScaleFloorMs = prefs[int(SMART_SCALE_FLOOR)] ?: db.smartScaleFloorMs,
+                    smartScaleCeilingMs = prefs[int(SMART_SCALE_CEILING)] ?: db.smartScaleCeilingMs,
                 )
             }
             return RealmSettings(world, bots)

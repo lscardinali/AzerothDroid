@@ -52,16 +52,19 @@ class RealmSettingsTest {
     @Test
     fun botDefaultsKeepModestAndOtherwiseTheDist() {
         val tuned = mapOf(
-            "Playerbots.MinRandomBots" to "10",
-            "Playerbots.MaxRandomBots" to "10",
-            "Playerbots.RandomBotsPerInterval" to "5",
-            "Playerbots.BotActiveAlone" to "5",
-            "Playerbots.RandomBotJoinBG" to "0",
-            "Playerbots.RandomBotGuildCount" to "0",
+            "Playerbots.MinRandomBots" to "60",
+            "Playerbots.MaxRandomBots" to "60",
+            "Playerbots.RandomBotsPerInterval" to "10",
+            "Playerbots.BotActiveAlone" to "10",
+            "Playerbots.RandomBotGuildCount" to "5",
             "Playerbots.AddClassAccountPoolSize" to "1",
-            "Playerbots.SyncLevelWithPlayers" to "1",
             "Playerbots.RandomBotConcentrateInPlayerZone" to "1",
             "Playerbots.DisabledWithoutRealPlayer" to "1",
+            "Playerbots.LevelBrackets.Dynamic.UseDynamicDistribution" to "1",
+            "Playerbots.LevelBrackets.Dynamic.RealPlayerWeight" to "3.0",
+            "Playerbots.EnablePeriodicOnlineOffline" to "1",
+            "Playerbots.botActiveAloneSmartScaleDiffLimitfloor" to "30",
+            "Playerbots.botActiveAloneSmartScaleDiffLimitCeiling" to "120",
         )
         val conf = dist("playerbots.conf.dist")
         PlayerbotsConfig.MODEST.overrides().forEach { (key, value) ->
