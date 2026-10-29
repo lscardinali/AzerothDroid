@@ -8,16 +8,18 @@ import java.net.NetworkInterface
 object SystemStats {
 
     /** Values from /proc/meminfo in kB. */
-    data class DeviceMemory(val totalKb: Long, val availableKb: Long)
+    data class DeviceMemory(val totalKb: Long, val availableKb: Long, val swapTotalKb: Long, val swapFreeKb: Long)
 
-    /** VmRSS / VmHWM (peak RSS) of a process in kB. */
-    data class ProcessMemory(val pid: Int, val rssKb: Long, val peakRssKb: Long)
+    /** VmRSS / VmHWM (peak RSS) / VmSwap of a process in kB. */
+    data class ProcessMemory(val pid: Int, val rssKb: Long, val peakRssKb: Long, val swapKb: Long)
 
     fun deviceMemory(): DeviceMemory {
         val fields = readKbFields(File("/proc/meminfo"))
         return DeviceMemory(
             totalKb = fields["MemTotal"] ?: 0,
             availableKb = fields["MemAvailable"] ?: 0,
+            swapTotalKb = fields["SwapTotal"] ?: 0,
+            swapFreeKb = fields["SwapFree"] ?: 0,
         )
     }
 
@@ -25,7 +27,7 @@ object SystemStats {
         val file = File("/proc/$pid/status")
         if (!file.canRead()) return null
         val fields = readKbFields(file)
-        return ProcessMemory(pid, fields["VmRSS"] ?: 0, fields["VmHWM"] ?: 0)
+        return ProcessMemory(pid, fields["VmRSS"] ?: 0, fields["VmHWM"] ?: 0, fields["VmSwap"] ?: 0)
     }
 
     /** Non-loopback IPv4 addresses, e.g. "wlan0" -> "192.168.1.42". */

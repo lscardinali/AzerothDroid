@@ -83,6 +83,7 @@ class AuthServer(context: Context, private val native: NativeRuntime, private va
             .put("error", error)
             .put("pid", pid)
             .put("rssKb", memory?.rssKb)
+            .put("swapKb", memory?.swapKb)
             .put("peakRssKb", memory?.peakRssKb)
             .put("port", PORT)
     }

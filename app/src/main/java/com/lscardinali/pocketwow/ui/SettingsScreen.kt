@@ -12,14 +12,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -48,7 +46,7 @@ import kotlinx.coroutines.launch
  * reads the store when it starts, so nothing here touches a running realm.
  */
 @Composable
-fun SettingsScreen(modifier: Modifier, realmRunning: Boolean, onBack: () -> Unit) {
+fun SettingsScreen(modifier: Modifier, realmRunning: Boolean) {
     val context = LocalContext.current
     val store = remember { RealmSettingsStore(context) }
     val saved by store.settings.collectAsState(initial = null)
@@ -61,9 +59,8 @@ fun SettingsScreen(modifier: Modifier, realmRunning: Boolean, onBack: () -> Unit
     var generation by remember { mutableIntStateOf(0) }
 
     Column(modifier.fillMaxSize()) {
-        Row(Modifier.padding(start = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onBack) { Text("Back") }
-            Text("Realm settings", style = MaterialTheme.typography.headlineMedium)
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            ScreenHeader("Settings", "Server rates and playerbots; applied when the realm next starts")
         }
         val current = draft
         if (current == null) {
@@ -78,7 +75,7 @@ fun SettingsScreen(modifier: Modifier, realmRunning: Boolean, onBack: () -> Unit
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            SettingsCard("About these settings") {
+            SettingsCard("Before you change things") {
                 Text(
                     if (realmRunning) {
                         "The realm is running. Saved changes apply the next time it starts: stop and start it."
@@ -105,8 +102,9 @@ fun SettingsScreen(modifier: Modifier, realmRunning: Boolean, onBack: () -> Unit
                 Button(
                     onClick = { scope.launch { store.save(current) } },
                     enabled = current != saved && errors.isEmpty() && unparsed.none { it.value },
+                    modifier = Modifier.weight(1f),
                 ) { Text("Save") }
-                OutlinedButton(onClick = {
+                OutlinedButton(modifier = Modifier.weight(1f), onClick = {
                     draft = RealmSettings.DEFAULT
                     unparsed.clear()
                     generation++
@@ -361,17 +359,12 @@ private fun Label(label: String, note: String?, memoryHeavy: Boolean) {
 
 @Composable
 private fun MemoryHeavy() {
-    Text("Memory-heavy", color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.labelSmall)
+    Text("MEMORY-HEAVY", color = MaterialTheme.colorScheme.tertiary, style = MaterialTheme.typography.labelSmall)
 }
 
 @Composable
 private fun SettingsCard(title: String, content: @Composable () -> Unit) {
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            content()
-        }
-    }
+    Panel(title) { content() }
 }
 
 private fun rate(value: Float) = if (value % 1f == 0f) value.toLong().toString() else value.toString()

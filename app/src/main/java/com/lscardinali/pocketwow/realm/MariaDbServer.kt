@@ -81,6 +81,7 @@ class MariaDbServer(context: Context, private val native: NativeRuntime) {
             .put("error", error)
             .put("pid", pid)
             .put("rssKb", memory?.rssKb)
+            .put("swapKb", memory?.swapKb)
             .put("peakRssKb", memory?.peakRssKb)
             .put("port", PORT)
             .put("socket", socket.path)
