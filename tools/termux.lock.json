@@ -8,7 +8,8 @@
     "openssl",
     "zlib",
     "libbz2",
-    "liblzma"
+    "liblzma",
+    "readline"
   ],
   "packages": {
     "boost": {
@@ -105,6 +106,11 @@
       "version": "10.49",
       "filename": "pool/main/p/pcre2/pcre2_10.49_aarch64.deb",
       "sha256": "c27995e5f52b8ecc9b8b3e662eb08e49f82a18bfd3f34343936acc7b23964724"
+    },
+    "readline": {
+      "version": "8.3.6",
+      "filename": "pool/main/r/readline/readline_8.3.6_aarch64.deb",
+      "sha256": "616cc73009bc0223f61caed8dd09455714455aa5ea5e180126e2f69c4c775136"
     },
     "zlib": {
       "version": "1.3.2",

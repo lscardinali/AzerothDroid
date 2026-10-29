@@ -42,6 +42,11 @@ android {
         }
     }
 
+    androidResources {
+        // sql.zip is already deflated; storing it avoids a second compression pass.
+        noCompress += "zip"
+    }
+
     packaging {
         // Native server binaries are shipped as lib*.so and exec'd from nativeLibraryDir,
         // so they must be extracted to disk at install time.

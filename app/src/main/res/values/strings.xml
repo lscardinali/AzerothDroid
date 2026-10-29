@@ -1,4 +1,5 @@
 <resources>
     <string name="app_name">PocketWoW</string>
     <string name="realm_channel_name">Realm service</string>
+    <string name="setup_channel_name">Setup</string>
 </resources>

@@ -16,28 +16,32 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import com.lscardinali.pocketwow.realm.DataPack
 import com.lscardinali.pocketwow.realm.RealmService
 import com.lscardinali.pocketwow.realm.SystemStats
+import com.lscardinali.pocketwow.setup.ClientDataInstaller
+import com.lscardinali.pocketwow.setup.SetupService
 import com.lscardinali.pocketwow.ui.theme.PocketWowTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 
 class MainActivity : ComponentActivity() {
 
@@ -57,6 +61,7 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.padding(padding),
                         onStart = { RealmService.start(this) },
                         onStop = { RealmService.stop(this) },
+                        onSetup = { SetupService.start(this) },
                     )
                 }
             }
@@ -65,16 +70,21 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun HomeScreen(modifier: Modifier, onStart: () -> Unit, onStop: () -> Unit) {
+private fun HomeScreen(modifier: Modifier, onStart: () -> Unit, onStop: () -> Unit, onSetup: () -> Unit) {
+    val dataPack = DataPack(LocalContext.current)
+    val setup by ClientDataInstaller.progress.collectAsState()
+    // Re-read from disk when setup finishes; also covers data pushed over adb.
+    var clientDataReady by remember { mutableStateOf(dataPack.clientDataInstalled) }
     var status by remember { mutableStateOf<JSONObject?>(null) }
     var device by remember { mutableStateOf(SystemStats.deviceMemory()) }
     var ui by remember { mutableStateOf(SystemStats.processMemory()) }
 
     LaunchedEffect(Unit) {
         while (true) {
-            status = withContext(Dispatchers.IO) { fetchStatus() }
+            status = withContext(Dispatchers.IO) { RealmService.currentStatus() }
             device = SystemStats.deviceMemory()
             ui = SystemStats.processMemory()
+            clientDataReady = dataPack.clientDataInstalled
             delay(2_000)
         }
     }
@@ -88,19 +98,23 @@ private fun HomeScreen(modifier: Modifier, onStart: () -> Unit, onStop: () -> Un
     ) {
         Text("PocketWoW", style = MaterialTheme.typography.headlineMedium)
 
+        if (!clientDataReady) {
+            SetupCard(dataPack.clientDataVersion, setup, onSetup)
+        }
+
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = onStart) { Text("Start realm") }
+            Button(onClick = onStart, enabled = clientDataReady) { Text("Start realm") }
             OutlinedButton(onClick = onStop) { Text("Stop") }
         }
 
         InfoCard("Service") {
             val s = status
             if (s == null) {
-                Text("Stopped (no answer on 127.0.0.1:${RealmService.STATUS_PORT})")
+                Text("Stopped")
             } else {
                 Text("Running, up ${s.optLong("uptimeSec")} s")
                 val realm = s.optJSONObject("processes")?.optJSONObject("realmService")
-                Text("Realm process RSS: ${mb(realm?.optLong("rssKb"))} (peak ${mb(realm?.optLong("peakRssKb"))})")
+                Text("App process RSS: ${mb(realm?.optLong("rssKb"))} (peak ${mb(realm?.optLong("peakRssKb"))})")
             }
         }
 
@@ -134,21 +148,69 @@ private fun HomeScreen(modifier: Modifier, onStart: () -> Unit, onStop: () -> Un
             }
         }
 
+        InfoCard("World server") {
+            val worldserver = status?.optJSONObject("worldserver")
+            if (worldserver == null) {
+                Text("Not running")
+            } else {
+                Text("${worldserver.optString("state")}  port ${worldserver.optInt("port")}")
+                if (!worldserver.isNull("realmAddress")) Text("Realm address ${worldserver.optString("realmAddress")}")
+                if (!worldserver.isNull("pid")) {
+                    Text("PID ${worldserver.optInt("pid")}, RSS ${mb(worldserver.optLong("rssKb"))} (peak ${mb(worldserver.optLong("peakRssKb"))})")
+                }
+                if (!worldserver.isNull("error")) {
+                    Text(worldserver.optString("error"), color = MaterialTheme.colorScheme.error)
+                }
+            }
+            val pack = status?.optJSONObject("dataPack")
+            if (pack != null) {
+                Text("Data pack: SQL ${pack.optString("sql", "missing")}, client data ${pack.optString("clientData", "missing")}")
+            }
+        }
+
         InfoCard("Memory") {
             Text("Device: ${mb(device.availableKb)} free of ${mb(device.totalKb)}")
             Text("UI process RSS: ${mb(ui?.rssKb)}")
         }
 
-        InfoCard("Reach it from your PC") {
+        InfoCard("Connect a client") {
+            Text("realmlist.wtf on this device: set realmlist 127.0.0.1")
             val addresses = SystemStats.lanAddresses()
             if (addresses.isEmpty()) Text("No network connection")
             addresses.forEach { (nic, ip) ->
                 Text(
-                    "curl http://$ip:${RealmService.STATUS_PORT}/status   ($nic)",
+                    "From your PC: set realmlist $ip   ($nic)",
                     fontFamily = FontFamily.Monospace,
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun SetupCard(version: String, progress: ClientDataInstaller.Progress, onSetup: () -> Unit) {
+    InfoCard("Setup: client data") {
+        Text(
+            "The world server needs WotLK 3.3.5a client data (maps, DBC, pathfinding), $version. " +
+                "It is downloaded from AzerothCore's client-data release: about 1.2 GB, " +
+                "3.5 GB once extracted. The download is deleted afterwards.",
+        )
+        when (progress) {
+            is ClientDataInstaller.Progress.Downloading -> {
+                Text("Downloading ${progress.bytes / MB} / ${progress.total / MB} MB")
+                LinearProgressIndicator(progress = { progress.bytes.toFloat() / progress.total.coerceAtLeast(1) })
+            }
+            is ClientDataInstaller.Progress.Extracting -> {
+                Text("Extracting ${progress.files} / ${progress.total} files")
+                LinearProgressIndicator(progress = { progress.files.toFloat() / progress.total.coerceAtLeast(1) })
+            }
+            is ClientDataInstaller.Progress.Failed -> {
+                Text(progress.message, color = MaterialTheme.colorScheme.error)
+                Button(onClick = onSetup) { Text("Retry") }
+            }
+            ClientDataInstaller.Progress.Idle -> Button(onClick = onSetup) { Text("Download and install") }
+            ClientDataInstaller.Progress.Done -> Text("Installed")
         }
     }
 }
@@ -163,14 +225,7 @@ private fun InfoCard(title: String, content: @Composable () -> Unit) {
     }
 }
 
+private const val MB = 1024L * 1024
+
 private fun mb(kb: Long?): String = if (kb == null) "?" else "%.0f MB".format(kb / 1024.0)
 
-private fun fetchStatus(): JSONObject? = try {
-    val conn = URL("http://127.0.0.1:${RealmService.STATUS_PORT}/status")
-        .openConnection() as HttpURLConnection
-    conn.connectTimeout = 500
-    conn.readTimeout = 1_000
-    conn.inputStream.bufferedReader().use { JSONObject(it.readText()) }
-} catch (_: Exception) {
-    null
-}

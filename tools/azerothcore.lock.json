@@ -1,5 +1,12 @@
 {
   "repo": "https://github.com/mod-playerbots/azerothcore-wotlk.git",
   "branch": "Playerbot",
-  "commit": "3f2969ddb0da42b48b4fca050c02b19163ba1e20"
+  "commit": "3f2969ddb0da42b48b4fca050c02b19163ba1e20",
+  "modules": {
+    "mod-playerbots": {
+      "repo": "https://github.com/mod-playerbots/mod-playerbots.git",
+      "branch": "master",
+      "commit": "e88cc4099e69f35126b28942a412ca702d20453b"
+    }
+  }
 }

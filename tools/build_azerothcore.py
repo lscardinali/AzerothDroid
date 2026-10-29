@@ -2,28 +2,34 @@
 """Cross-compile AzerothCore (mod-playerbots fork) for Android arm64 and stage it.
 
 Builds with the NDK's clang, using Termux packages (tools/termux.py) as the sysroot for
-Boost, OpenSSL, libmariadb and zlib, so none of them need cross-compiling here. Boost
-links statically; the rest are shared libraries shipped alongside MariaDB's.
+Boost, OpenSSL, libmariadb, readline and zlib, so none of them need cross-compiling here.
+Boost links statically; the rest are shared libraries shipped alongside MariaDB's.
 
-The source is the mod-playerbots/azerothcore-wotlk `Playerbot` branch, pinned to a
-commit in tools/azerothcore.lock.json and checked out into native/src/azerothcore.
+The core (mod-playerbots/azerothcore-wotlk `Playerbot` branch) and its modules are pinned
+in tools/azerothcore.lock.json and checked out into native/src/azerothcore. Android/Bionic
+source fixes live in native/patches/<repo>/*.patch.
 
 Output:
-  native/out/jniLibs/arm64-v8a/libauthserver.so (+ shared library closure)
-  native/out/assets/authserver/   manifest.json, authserver.conf.dist
-  native/out/assets/azerothcore/  data/sql/{base,updates,archive}/db_auth, read by
-                                  AzerothCore's own DB updater (SourceDirectory)
+  native/out/jniLibs/arm64-v8a/lib<app>.so (+ shared library closure)
+  native/out/assets/<app>/        manifest.json and the .conf.dist templates
+  native/out/assets/azerothcore/  sql.zip: data/sql/{base,updates} and each module's
+                                  data/sql, AzerothCore's SourceDirectory for its DB
+                                  updater; manifest.json with the client-data release
 
-Android/Bionic source fixes live in native/patches/azerothcore/*.patch.
+Client data (Blizzard-derived) is never bundled: the app downloads it in its setup phase,
+from the same wowgaming/client-data release AzerothCore's Docker setup uses.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -32,14 +38,18 @@ import termux  # noqa: E402
 ROOT = termux.ROOT
 LOCKFILE = ROOT / "tools" / "azerothcore.lock.json"
 SOURCE = ROOT / "native" / "src" / "azerothcore"
-PATCHES = ROOT / "native" / "patches" / "azerothcore"
+PATCHES = ROOT / "native" / "patches"
 BUILD = ROOT / "native" / ".build" / "azerothcore"
 SDK = Path(os.environ.get("ANDROID_HOME", Path.home() / "Library/Android/sdk"))
 ANDROID_PLATFORM = "android-26"
 
-# app -> (CMake APPS_BUILD value, databases whose SQL the app's updater needs)
+# app -> config templates to ship, relative to SOURCE
 APPS = {
-    "authserver": ("auth-only", ["db_auth"]),
+    "authserver": ["src/server/apps/authserver/authserver.conf.dist"],
+    "worldserver": [
+        "src/server/apps/worldserver/worldserver.conf.dist",
+        "modules/mod-playerbots/conf/playerbots.conf.dist",
+    ],
 }
 
 
@@ -55,25 +65,26 @@ def latest(pattern: str, base: Path) -> Path:
     return found[-1]
 
 
-def checkout(lock: dict) -> None:
-    """Shallow checkout of exactly the pinned commit."""
-    if not (SOURCE / ".git").is_dir():
-        SOURCE.parent.mkdir(parents=True, exist_ok=True)
-        run("git", "clone", "--depth", "1", "--branch", lock["branch"], lock["repo"], SOURCE)
-    head = subprocess.check_output(["git", "-C", str(SOURCE), "rev-parse", "HEAD"], text=True).strip()
-    if head != lock["commit"]:
-        run("git", "-C", SOURCE, "fetch", "--depth", "1", "origin", lock["commit"])
-        run("git", "-C", SOURCE, "checkout", "--detach", lock["commit"])
-    apply_patches()
-
-
-def apply_patches() -> None:
-    """Android/Bionic fixes, kept as patches so a re-pin re-applies them deliberately."""
-    for patch in sorted(PATCHES.glob("*.patch")):
-        already = subprocess.run(["git", "-C", str(SOURCE), "apply", "--reverse", "--check", str(patch)],
+def checkout_repo(path: Path, pin: dict, patches: Path) -> None:
+    """Shallow checkout of exactly the pinned commit, then apply our patches."""
+    if not (path / ".git").exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        run("git", "clone", "--depth", "1", "--branch", pin["branch"], pin["repo"], path)
+    head = subprocess.check_output(["git", "-C", str(path), "rev-parse", "HEAD"], text=True).strip()
+    if head != pin["commit"]:
+        run("git", "-C", path, "fetch", "--depth", "1", "origin", pin["commit"])
+        run("git", "-C", path, "checkout", "--detach", pin["commit"])
+    for patch in sorted(patches.glob("*.patch")):
+        already = subprocess.run(["git", "-C", str(path), "apply", "--reverse", "--check", str(patch)],
                                  capture_output=True).returncode == 0
         if not already:
-            run("git", "-C", SOURCE, "apply", patch)
+            run("git", "-C", path, "apply", patch)
+
+
+def checkout(lock: dict) -> None:
+    checkout_repo(SOURCE, lock, PATCHES / "azerothcore")
+    for name, pin in lock.get("modules", {}).items():
+        checkout_repo(SOURCE / "modules" / name, pin, PATCHES / name)
 
 
 def mysql_config_shim(usr: Path, version: str) -> Path:
@@ -94,7 +105,7 @@ def mysql_config_shim(usr: Path, version: str) -> Path:
     return shim
 
 
-def configure(usr: Path, app: str, lock_termux: dict) -> None:
+def configure(usr: Path, lock_termux: dict) -> None:
     ndk = latest("*", SDK / "ndk")
     cmake_bin = latest("*/bin", SDK / "cmake")
     mariadb_version = lock_termux["packages"]["mariadb"]["version"].split(":")[-1]
@@ -120,63 +131,105 @@ def configure(usr: Path, app: str, lock_termux: dict) -> None:
         f"-DOPENSSL_INCLUDE_DIR={usr / 'include'}",
         f"-DOPENSSL_CRYPTO_LIBRARY={libdir / 'libcrypto.so'}",
         f"-DOPENSSL_SSL_LIBRARY={libdir / 'libssl.so'}",
-        # What to build.
-        f"-DAPPS_BUILD={APPS[app][0]}",
+        f"-DREADLINE_INCLUDE_DIR={usr / 'include'}",
+        f"-DREADLINE_LIBRARY={libdir / 'libreadline.so'}",
+        # What to build: both servers, scripts and modules linked in statically.
+        "-DAPPS_BUILD=all",
         "-DTOOLS_BUILD=none",
-        "-DSCRIPTS=none",
-        "-DMODULES=none",
+        "-DSCRIPTS=static",
+        "-DMODULES=static",
         "-DBUILD_TESTING=0",
         "-DWITHOUT_METRICS=1",
         f"-DCMAKE_INSTALL_PREFIX={BUILD / 'install'}",
     )
 
 
-def stage(usr: Path, app: str) -> None:
+def stage(usr: Path, app: str, lock: dict) -> None:
     binary = BUILD / "src" / "server" / "apps" / app
-    candidates = [p for p in BUILD.rglob(app) if p.is_file() and os.access(p, os.X_OK)]
-    if not candidates:
-        sys.exit(f"built {app} binary not found under {BUILD}")
-    binary = candidates[0]
-    links = termux.stage_closure({binary: f"lib{app}.so"}, usr)
+    if not (binary.is_file() and os.access(binary, os.X_OK)):
+        sys.exit(f"built {app} binary not found at {binary}")
+    # OpenSSL 3 keeps RC4 (world socket header encryption) in its legacy provider, a module
+    # it loads by file name from OPENSSL_MODULES; the app points that at its library links.
+    legacy = usr / "lib" / "ossl-modules" / "legacy.so"
+    links = termux.stage_closure({binary: f"lib{app}.so", legacy: "libossl_legacy.so"}, usr)
+    links["legacy.so"] = "libossl_legacy.so"
+    # The NDK toolchain always compiles with -g; ship stripped, keep the unstripped
+    # binary in the build dir for symbolizing crashes.
+    strip = latest("*/toolchains/llvm/prebuilt/*/bin/llvm-strip", SDK / "ndk")
+    run(strip, "--strip-debug", termux.JNI / f"lib{app}.so")
 
     assets = termux.ASSETS / app
     if assets.exists():
         shutil.rmtree(assets)
     assets.mkdir(parents=True)
-    conf = SOURCE / "src" / "server" / "apps" / app / f"{app}.conf.dist"
-    shutil.copyfile(conf, assets / conf.name)
+    for conf in APPS[app]:
+        shutil.copyfile(SOURCE / conf, assets / Path(conf).name)
 
-    # SQL for AzerothCore's own updater (Updates.AutoSetup), per database.
-    sql_root = termux.ASSETS / "azerothcore" / "data" / "sql"
-    for database in APPS[app][1]:
-        for kind in ("base", "updates", "archive"):
-            source = SOURCE / "data" / "sql" / kind / database
-            target = sql_root / kind / database
-            if target.exists():
-                shutil.rmtree(target)
-            if source.is_dir():
-                shutil.copytree(source, target)
-
-    commit = json.loads(LOCKFILE.read_text())["commit"]
-    termux.write_manifest(app, {"commit": commit, "executable": f"lib{app}.so", "links": links})
+    modules = {name: pin["commit"] for name, pin in lock.get("modules", {}).items()}
+    termux.write_manifest(app, {
+        "commit": lock["commit"],
+        "modules": modules,
+        "executable": f"lib{app}.so",
+        "links": links,
+    })
     size = (termux.JNI / f"lib{app}.so").stat().st_size / 1e6
-    print(f"Staged {app} ({size:.1f} MB) with {len(links)} libraries, AzerothCore {commit[:10]}")
+    print(f"Staged {app} ({size:.1f} MB) with {len(links)} libraries, AzerothCore {lock['commit'][:10]}")
+
+
+def client_data_release() -> dict:
+    """The client-data version AzerothCore's installer pins, so data matches the core."""
+    script = (SOURCE / "apps/installer/includes/functions.sh").read_text()
+    version = re.search(r"local VERSION=(v[\d.]+)", script)
+    url = re.search(r"(https://github\.com/wowgaming/client-data/releases/download/)\$VERSION(/\S+)", script)
+    if not version or not url:
+        sys.exit("client-data release not found in apps/installer/includes/functions.sh")
+    return {"version": version.group(1), "url": url.group(1) + version.group(1) + url.group(2)}
+
+
+def stage_sql(lock: dict) -> None:
+    """Zips the SQL AzerothCore's updater reads, laid out as its SourceDirectory.
+    data/sql/archive is left out: it only holds already-merged history, and missing
+    files are cleaned from the updates table (Updates.CleanDeadRefMaxCount = -1)."""
+    identity = hashlib.sha256(json.dumps(lock, sort_keys=True).encode()).hexdigest()[:16]
+    assets = termux.ASSETS / "azerothcore"
+    manifest = {"sqlIdentity": identity, "clientData": client_data_release()}
+    archive = assets / "sql.zip"
+    current = assets / "manifest.json"
+    if archive.is_file() and current.is_file() and json.loads(current.read_text()) == manifest:
+        return
+    roots = ["data/sql/base", "data/sql/updates"]
+    roots += [f"modules/{name}/data/sql" for name in lock.get("modules", {})]
+    assets.mkdir(parents=True, exist_ok=True)
+    partial = archive.with_suffix(".part")
+    with zipfile.ZipFile(partial, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
+        for root in roots:
+            for path in sorted((SOURCE / root).rglob("*")):
+                if path.is_file():
+                    zf.write(path, path.relative_to(SOURCE).as_posix())
+    partial.replace(archive)
+    termux.write_manifest("azerothcore", manifest)
+    print(f"Staged sql.zip ({archive.stat().st_size / 1e6:.0f} MB), client data {manifest['clientData']['version']}")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("app", nargs="?", default="authserver", choices=sorted(APPS))
+    parser.add_argument("apps", nargs="*", default=sorted(APPS), choices=sorted(APPS))
     parser.add_argument("--reconfigure", action="store_true", help="wipe the CMake build directory first")
+    parser.add_argument("--jobs", "-j", type=int, help="parallel compile jobs (default: ninja's)")
     args = parser.parse_args()
 
     lock_termux = termux.load_lock()
     usr = termux.sysroot(lock_termux)
-    checkout(json.loads(LOCKFILE.read_text()))
+    lock = json.loads(LOCKFILE.read_text())
+    checkout(lock)
     if args.reconfigure and BUILD.exists():
         shutil.rmtree(BUILD)
-    configure(usr, args.app, lock_termux)
-    run(latest("*/bin", SDK / "cmake") / "cmake", "--build", BUILD, "--target", args.app)
-    stage(usr, args.app)
+    configure(usr, lock_termux)
+    jobs = ["-j", str(args.jobs)] if args.jobs else []
+    run(latest("*/bin", SDK / "cmake") / "cmake", "--build", BUILD, *jobs, "--target", *args.apps)
+    for app in args.apps:
+        stage(usr, app, lock)
+    stage_sql(lock)
     return 0
 
 

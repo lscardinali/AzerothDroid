@@ -47,6 +47,7 @@ ROOT_PACKAGES = [
     "mariadb",
     "boost", "boost-headers", "boost-static",
     "openssl", "zlib", "libbz2", "liblzma",
+    "readline",
 ]
 
 # Provided by Android itself; never bundled.

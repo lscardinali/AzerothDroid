@@ -55,13 +55,21 @@ class NativeRuntime(private val context: Context) {
         }
     }
 
-    fun command(executable: String, vararg args: String, home: File): ProcessBuilder =
+    fun command(
+        executable: String,
+        vararg args: String,
+        home: File,
+        extraEnv: Map<String, String> = emptyMap(),
+    ): ProcessBuilder =
         ProcessBuilder(listOf(File(nativeDir, executable).path) + args).apply {
             environment()["LD_LIBRARY_PATH"] = libDir.path
+            // OpenSSL providers (legacy.so, for RC4) are linked into libDir too.
+            environment()["OPENSSL_MODULES"] = libDir.path
             environment()["HOME"] = home.path
             environment()["TMPDIR"] = File(home, "tmp").apply { mkdirs() }.path
             // No terminal: AzerothCore must not wait on stdin prompts (e.g. "create database?").
             environment()["AC_DISABLE_INTERACTIVE"] = "1"
+            environment().putAll(extraEnv)
             directory(home)
         }
 

@@ -1,0 +1,29 @@
+diff --git a/src/server/shared/Packets/ByteBuffer.h b/src/server/shared/Packets/ByteBuffer.h
+index 56b4da5..ea331d6 100644
+--- a/src/server/shared/Packets/ByteBuffer.h
++++ b/src/server/shared/Packets/ByteBuffer.h
+@@ -23,6 +23,7 @@
+ #include <array>
+ #include <cstring>
+ #include <string>
++#include <type_traits>
+ #include <vector>
+ 
+ class MessageBuffer;
+@@ -196,6 +197,16 @@ public:
+         return *this;
+     }
+ 
++    // libc++ (Android) uses long long for e.g. std::chrono::duration::rep, a distinct type
++    // from int64 (long) on LP64 targets; write it with the same 8-byte wire size.
++    template<typename T, std::enable_if_t<(std::is_same_v<T, long long> || std::is_same_v<T, unsigned long long>)
++        && !std::is_same_v<T, int64> && !std::is_same_v<T, uint64>, int> = 0>
++    ByteBuffer& operator<<(T value)
++    {
++        append<T>(value);
++        return *this;
++    }
++
+     // floating points
+     ByteBuffer& operator<<(float value)
+     {

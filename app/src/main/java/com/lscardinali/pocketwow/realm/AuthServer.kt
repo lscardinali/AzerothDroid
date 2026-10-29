@@ -12,10 +12,11 @@ import java.util.concurrent.TimeUnit
  * Runs AzerothCore's authserver (login + realm list) built by tools/build_azerothcore.py.
  *
  * On first start AzerothCore's own updater (Updates.AutoSetup) creates the acore_auth
- * database and imports data/sql/base/db_auth through the bundled mariadb client.
+ * database and imports data/sql/base/db_auth (from the [DataPack]) through the bundled
+ * mariadb client.
  * Listens on 0.0.0.0:3724 so clients on the device and on the LAN can log in.
  */
-class AuthServer(context: Context, private val native: NativeRuntime) {
+class AuthServer(context: Context, private val native: NativeRuntime, private val dataPack: DataPack) {
 
     enum class State { STOPPED, STARTING, RUNNING, STOPPING, FAILED }
 
@@ -43,6 +44,7 @@ class AuthServer(context: Context, private val native: NativeRuntime) {
         error = null
         state = State.STARTING
         try {
+            dataPack.check()
             install()
             NativeRuntime.readPid(pidFile)?.let {
                 if (NativeRuntime.isRunning(it, EXECUTABLE)) Log.w(TAG, "Stopping stale authserver $it")
@@ -85,18 +87,11 @@ class AuthServer(context: Context, private val native: NativeRuntime) {
             .put("port", PORT)
     }
 
-    /** Copies the config template and the SQL the updater reads (SourceDirectory). */
+    /** Links libraries and copies the config template. */
     private fun install() {
         commit = native.manifest(COMPONENT).getString("commit")
         native.linkLibraries(COMPONENT)
-        val stamp = File(root, ".installed-$COMPONENT")
-        val identity = "$commit ${native.installIdentity}"
-        if (stamp.isFile && stamp.readText() == identity) return
-
-        File(root, "data/sql").deleteRecursively()
-        native.copyAssets("azerothcore", root)
         native.copyAssets("$COMPONENT/$COMPONENT.conf.dist", File(root, "$COMPONENT.conf.dist"))
-        stamp.writeText(identity)
     }
 
     private fun writeConfig() {
@@ -104,12 +99,14 @@ class AuthServer(context: Context, private val native: NativeRuntime) {
         val overrides = mapOf(
             "LogsDir" to logsDir.path,
             "PidFile" to pidFile.path,
-            "SourceDirectory" to root.path,
+            "SourceDirectory" to dataPack.sourceDirectory.path,
             "MySQLExecutable" to File(native.nativeDir, MariaDbServer.CLIENT).path,
             "TempDir" to File(root, "tmp").path + "/",
             "BindIP" to "0.0.0.0",
             "RealmServerPort" to PORT.toString(),
             "LoginDatabaseInfo" to "127.0.0.1;${MariaDbServer.PORT};acore;acore;acore_auth",
+            // data/sql/archive is not bundled; drop its rows from the updates table.
+            "Updates.CleanDeadRefMaxCount" to "-1",
         )
         configFile.writeText(applyOverrides(File(root, "$COMPONENT.conf.dist").readText(), overrides))
     }

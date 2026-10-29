@@ -1,0 +1,16 @@
+diff --git a/src/common/Configuration/Config.cpp b/src/common/Configuration/Config.cpp
+index 79c58af..75b974b 100644
+--- a/src/common/Configuration/Config.cpp
++++ b/src/common/Configuration/Config.cpp
+@@ -708,6 +708,11 @@ std::string const ConfigMgr::GetConfigPath()
+ #if AC_PLATFORM == AC_PLATFORM_WINDOWS
+     return "configs/";
+ #else
++    // _CONF_DIR is fixed at build time (a host path when cross-compiling); let the
++    // launcher point it at the real config directory, e.g. inside an Android app.
++    if (char const* configDir = std::getenv("AC_CONFIG_DIR"))
++        return std::string(configDir) + "/";
++
+     return std::string(_CONF_DIR) + "/";
+ #endif
+ }

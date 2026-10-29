@@ -16,12 +16,14 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.lscardinali.pocketwow.MainActivity
 import com.lscardinali.pocketwow.R
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.Executors
 
 /**
- * Foreground service hosting the realm stack: status endpoint, MariaDB and authserver
- * for now; worldserver gets layered on here next.
+ * Foreground service hosting the realm stack: MariaDB, authserver and worldserver (with
+ * mod-playerbots), started in that order. It runs in the app's own process, so the UI reads
+ * its state directly ([currentStatus]) and the device pays for one Android runtime, not two.
  *
  * No wake lock is held: when the device sleeps the CPU suspends and every process
  * freezes, then continues where it left off on wake. The foreground state is what keeps
@@ -29,18 +31,23 @@ import java.util.concurrent.Executors
  */
 class RealmService : Service() {
 
-    private var statusServer: StatusServer? = null
+    private var running = false
     private lateinit var database: MariaDbServer
     private lateinit var auth: AuthServer
+    private lateinit var world: WorldServer
+    private lateinit var dataPack: DataPack
     /** Start/stop steps block for seconds, so they run off the main thread, in order. */
     private val lifecycle = Executors.newSingleThreadExecutor()
     private var startedAt = 0L
+    @Volatile private var realmAddress: String? = null
 
     override fun onCreate() {
         super.onCreate()
         val native = NativeRuntime(this)
         database = MariaDbServer(this, native)
-        auth = AuthServer(this, native)
+        dataPack = DataPack(this)
+        auth = AuthServer(this, native, dataPack)
+        world = WorldServer(this, native, dataPack)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -53,7 +60,7 @@ class RealmService : Service() {
             }
             return START_NOT_STICKY
         }
-        if (statusServer == null) startRealm()
+        if (!running) startRealm()
         return START_STICKY
     }
 
@@ -65,28 +72,49 @@ class RealmService : Service() {
             ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
         )
         startedAt = SystemClock.elapsedRealtime()
-        statusServer = StatusServer(STATUS_PORT, routes()).also {
-            try {
-                it.start()
-            } catch (e: Exception) {
-                Log.e(TAG, "Status server failed to start", e)
-            }
-        }
+        running = true
+        instance = this
         lifecycle.execute {
             database.start()
-            if (database.state == MariaDbServer.State.RUNNING) auth.start()
+            if (database.state != MariaDbServer.State.RUNNING) return@execute
+            runCatching { dataPack.installSql() }.onFailure { Log.e(TAG, "Unpacking SQL failed", it) }
+            // Before auth too: it exits when no realm is listable, e.g. flagged offline after
+            // the world server was killed. On first start the table does not exist yet.
+            publishRealmAddress()
+            auth.start()
+            if (auth.state != AuthServer.State.RUNNING) return@execute
+            publishRealmAddress()
+            world.start(PlayerbotsConfig.MODEST)
         }
+    }
+
+    /**
+     * The realm list tells clients where the world server is. Use the current LAN address
+     * so both a client on this device and one elsewhere on the network can connect
+     * (worldserver binds 0.0.0.0); fall back to loopback when offline.
+     */
+    private fun publishRealmAddress() {
+        val addresses = SystemStats.lanAddresses()
+        val ip = (addresses.firstOrNull { it.first == "wlan0" } ?: addresses.firstOrNull())?.second ?: "127.0.0.1"
+        runCatching {
+            database.execute(
+                "UPDATE acore_auth.realmlist SET address = '$ip', localAddress = '$ip', " +
+                    "localSubnetMask = '255.255.255.0', port = ${WorldServer.PORT}, flag = flag & ~3 WHERE id = 1;",
+            )
+        }.onFailure { Log.w(TAG, "Could not update realm address", it) }
+        realmAddress = ip
     }
 
     /** Reverse start order: servers first, so their last writes reach the database. */
     private fun stopStack() {
+        world.stop()
         auth.stop()
         database.stop()
     }
 
     override fun onDestroy() {
-        statusServer?.stop()
-        statusServer = null
+        running = false
+        instance = null
         // Normally already stopped via ACTION_STOP. If the system destroys us instead,
         // still shut the stack down cleanly; leftover processes are reaped on next start.
         lifecycle.execute { stopStack() }
@@ -94,21 +122,20 @@ class RealmService : Service() {
         super.onDestroy()
     }
 
-    private fun routes(): Map<String, () -> Pair<String, String>> = mapOf(
-        "/" to { StatusServer.JSON to status().toString(2) },
-        "/status" to { StatusServer.JSON to status().toString(2) },
-        "/logs/mariadb" to { StatusServer.TEXT to tail(database.logFile) },
-        "/logs/authserver" to { StatusServer.TEXT to tail(auth.logFile) },
-        "/logs/authserver.out" to { StatusServer.TEXT to tail(auth.stdoutFile) },
-    )
-
     private fun status(): JSONObject {
         val device = SystemStats.deviceMemory()
         val self = SystemStats.processMemory()
         return JSONObject()
             .put("service", "running")
             .put("uptimeSec", (SystemClock.elapsedRealtime() - startedAt) / 1000)
-            .put("addresses", StatusServer.addressesJson())
+            .put(
+                "addresses",
+                JSONArray().apply {
+                    SystemStats.lanAddresses().forEach { (nic, ip) ->
+                        put(JSONObject().put("interface", nic).put("ip", ip))
+                    }
+                },
+            )
             .put(
                 "deviceMemory",
                 JSONObject()
@@ -127,13 +154,10 @@ class RealmService : Service() {
             )
             .put("database", database.status())
             .put("authserver", auth.status())
+            .put("worldserver", world.status().put("realmAddress", realmAddress))
+            .put("dataPack", dataPack.status())
     }
 
-    private fun tail(file: java.io.File, maxBytes: Int = 16 * 1024): String {
-        if (!file.isFile) return "(no log yet)\n"
-        val bytes = file.readBytes()
-        return String(bytes, maxOf(0, bytes.size - maxBytes), minOf(bytes.size, maxBytes))
-    }
 
     private fun buildNotification(): Notification {
         val manager = getSystemService(NotificationManager::class.java)
@@ -153,7 +177,7 @@ class RealmService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_upload)
             .setContentTitle("PocketWoW realm running")
-            .setContentText("Status on port $STATUS_PORT")
+            .setContentText("Login on port ${AuthServer.PORT}, world on port ${WorldServer.PORT}")
             .setOngoing(true)
             .setContentIntent(openApp)
             .addAction(0, "Stop", stop)
@@ -165,7 +189,10 @@ class RealmService : Service() {
         private const val CHANNEL_ID = "realm"
         private const val NOTIFICATION_ID = 1
         private const val ACTION_STOP = "com.lscardinali.pocketwow.STOP"
-        const val STATUS_PORT = 8080
+        @Volatile private var instance: RealmService? = null
+
+        /** Status of the running realm, or null when the service is not running. */
+        fun currentStatus(): JSONObject? = instance?.status()
 
         fun start(context: Context) =
             ContextCompat.startForegroundService(context, Intent(context, RealmService::class.java))

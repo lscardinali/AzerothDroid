@@ -211,6 +211,14 @@ class MariaDbServer(context: Context, private val native: NativeRuntime) {
 
     // -- helpers ------------------------------------------------------------
 
+    /** Runs SQL as root; throws with the client's output if it fails. Returns the output. */
+    fun execute(statements: String): String {
+        check(state == State.RUNNING) { "database not running" }
+        val (code, output) = sql(statements)
+        check(code == 0) { "SQL failed: $output" }
+        return output
+    }
+
     /** Runs SQL as root through the bundled client. Returns exit code and output. */
     private fun sql(statements: String): Pair<Int, String> {
         val proc = command(CLIENT, "--defaults-file=${configFile.path}", "--user=root", "--batch")
