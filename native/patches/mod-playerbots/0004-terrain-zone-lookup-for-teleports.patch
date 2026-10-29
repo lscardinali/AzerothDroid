@@ -1,0 +1,93 @@
+diff --git a/src/Bot/RandomPlayerbotMgr.cpp b/src/Bot/RandomPlayerbotMgr.cpp
+index 18379f5..b1f78c9 100644
+--- a/src/Bot/RandomPlayerbotMgr.cpp
++++ b/src/Bot/RandomPlayerbotMgr.cpp
+@@ -19,6 +19,7 @@
+ #include "FleeManager.h"
+ #include "GridNotifiers.h"
+ #include "GridNotifiersImpl.h"
++#include "GridTerrainData.h"
+ #include "LFGMgr.h"
+ #include "MapMgr.h"
+ #include "NewRpgInfo.h"
+@@ -1894,7 +1895,7 @@ std::vector<WorldLocation> RandomPlayerbotMgr::GetPlayerZoneTeleportLocations(st
+         if (playerMaps.find(loc.GetMapId()) == playerMaps.end())
+             continue;
+ 
+-        uint32 zoneId = sMapMgr->GetZoneId(PHASEMASK_NORMAL, loc);
++        uint32 zoneId = GetTerrainZoneId(loc);
+         bool const inPlayerZone = playerMapZones.find(std::make_pair(loc.GetMapId(), zoneId)) != playerMapZones.end();
+         if (!inPlayerZone && !sameMapLocs)
+             continue;
+@@ -1927,6 +1928,40 @@ std::vector<WorldLocation> RandomPlayerbotMgr::GetPlayerZoneTeleportLocations(st
+     return filtered;
+ }
+ 
++// Zone of a teleport location from its grid's .map file alone, cached. sMapMgr->GetZoneId would
++// create the grid (loading terrain, vmaps and mmaps, which are never unloaded) for every candidate
++// spot each time a bot teleports, filling memory with grids nobody visits.
++uint32 RandomPlayerbotMgr::GetTerrainZoneId(WorldLocation const& loc)
++{
++    auto const key = std::make_tuple(loc.GetMapId(), int32(loc.GetPositionX()), int32(loc.GetPositionY()));
++    std::lock_guard<std::mutex> lock(_terrainZoneCacheLock);
++    if (auto itr = _terrainZoneCache.find(key); itr != _terrainZoneCache.end())
++        return itr->second;
++
++    GridCoord const coord = Acore::ComputeGridCoord(loc.GetPositionX(), loc.GetPositionY());
++    auto const grid = std::make_tuple(loc.GetMapId(), coord.x_coord, coord.y_coord);
++    if (grid != _lastTerrainGrid)
++    {
++        _lastTerrainGrid = grid;
++        _lastTerrain = std::make_unique<GridTerrainData>();
++        std::string const mapFileName = Acore::StringFormat("{}maps/{:03}{:02}{:02}.map", sWorld->GetDataPath(),
++                                                            loc.GetMapId(), coord.x_coord, coord.y_coord);
++        if (_lastTerrain->Load(mapFileName) != TerrainMapDataReadResult::Success)
++            _lastTerrain.reset();
++    }
++
++    uint32 zoneId = 0;
++    if (_lastTerrain)
++    {
++        uint16 const areaId = _lastTerrain->getArea(loc.GetPositionX(), loc.GetPositionY());
++        if (AreaTableEntry const* area = sAreaTableStore.LookupEntry(areaId))
++            zoneId = area->zone ? area->zone : area->ID;
++    }
++
++    _terrainZoneCache.emplace(key, zoneId);
++    return zoneId;
++}
++
+ // World thread only.
+ void RandomPlayerbotMgr::UpdatePlayerZones()
+ {
+diff --git a/src/Bot/RandomPlayerbotMgr.h b/src/Bot/RandomPlayerbotMgr.h
+index 142afc2..065dd19 100644
+--- a/src/Bot/RandomPlayerbotMgr.h
++++ b/src/Bot/RandomPlayerbotMgr.h
+@@ -8,10 +8,12 @@
+ #define PLAYERBOTS_RANDOMPLAYERBOTMGR_H
+ 
+ #include "GameTime.h"
++#include "GridTerrainData.h"
+ #include "NewRpgInfo.h"
+ #include "ObjectGuid.h"
+ #include "PlayerbotCommandServer.h"
+ #include "PlayerbotMgr.h"
++#include <memory>
+ #include <mutex>
+ #include <set>
+ #include <unordered_set>
+@@ -260,6 +262,13 @@ private:
+     // Written on the world thread, read from map threads.
+     std::set<std::pair<uint32, uint32>> _playerZones;
+     std::mutex _playerZonesLock;
++    uint32 GetTerrainZoneId(WorldLocation const& loc);
++    // Zone per teleport location (map, x, y), read from terrain files; see GetTerrainZoneId.
++    std::map<std::tuple<uint32, int32, int32>, uint32> _terrainZoneCache;
++    std::mutex _terrainZoneCacheLock;
++    // The grid read last: candidate spots cluster, so most misses hit the same file.
++    std::tuple<uint32, uint32, uint32> _lastTerrainGrid{UINT32_MAX, 0, 0};
++    std::unique_ptr<GridTerrainData> _lastTerrain;
+ 
+     // Account lists
+     std::vector<uint32> rndBotTypeAccounts;             // Accounts marked as RNDbot (type 1)

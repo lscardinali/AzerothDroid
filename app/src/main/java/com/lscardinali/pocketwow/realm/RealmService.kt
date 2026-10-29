@@ -21,6 +21,7 @@ import com.lscardinali.pocketwow.R
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * Foreground service hosting the realm stack: MariaDB, authserver and worldserver (with
@@ -63,6 +64,9 @@ class RealmService : Service() {
     }
     /** Start/stop steps block for seconds, so they run off the main thread, in order. */
     private val lifecycle = Executors.newSingleThreadExecutor()
+    private val watchdog = Executors.newSingleThreadScheduledExecutor()
+    @Volatile private var restarting = false
+    private val restartTimes = mutableListOf<Long>()
     private var startedAt = 0L
     @Volatile private var realmAddress: String? = null
 
@@ -105,15 +109,21 @@ class RealmService : Service() {
             IntentFilter(Intent.ACTION_SHUTDOWN).apply { addAction(ACTION_QUICKBOOT_POWEROFF) },
             ContextCompat.RECEIVER_EXPORTED,
         )
-        lifecycle.execute {
+        lifecycle.execute(::startStack)
+        watchdog.scheduleWithFixedDelay(::checkServers, WATCHDOG_SECONDS, WATCHDOG_SECONDS, TimeUnit.SECONDS)
+    }
+
+    /** Blocking, on [lifecycle]: database, then auth, then world; each step needs the last. */
+    private fun startStack() {
+        run {
             database.start()
-            if (database.state != MariaDbServer.State.RUNNING) return@execute
+            if (database.state != MariaDbServer.State.RUNNING) return@run
             runCatching { dataPack.installSql() }.onFailure { Log.e(TAG, "Unpacking SQL failed", it) }
             // Before auth too: it exits when no realm is listable, e.g. flagged offline after
             // the world server was killed. On first start the table does not exist yet.
             publishRealmAddress()
             auth.start()
-            if (auth.state != AuthServer.State.RUNNING) return@execute
+            if (auth.state != AuthServer.State.RUNNING) return@run
             publishRealmAddress()
             runCatching { console.prepare(Accounts(database)) }
                 .onFailure { Log.w(TAG, "Could not prepare the console account", it) }
@@ -125,6 +135,35 @@ class RealmService : Service() {
                     // Without that, bots are meant to live on with nobody playing.
                     pauseWhenIdle = settings.bots.disabledWithoutRealPlayer,
                 ).also { it.start() }
+            }
+        }
+    }
+
+    /**
+     * Restarts the stack in order when a server died under us (Android's low-memory killer
+     * can take a single child process). At most [MAX_RESTARTS] per [RESTART_WINDOW_MS], so
+     * a kill-and-restart loop under memory pressure gives up and leaves the failure on screen.
+     */
+    private fun checkServers() {
+        if (!running || restarting) return
+        // Check all three: each marks itself FAILED.
+        val exited = listOf(database.checkExited(), auth.checkExited(), world.checkExited())
+        if (exited.none { it }) return
+        val now = SystemClock.elapsedRealtime()
+        restartTimes.removeAll { now - it > RESTART_WINDOW_MS }
+        if (restartTimes.size >= MAX_RESTARTS) {
+            Log.e(TAG, "Server exited again; ${restartTimes.size} restarts recently, giving up")
+            return
+        }
+        restartTimes += now
+        restarting = true
+        Log.w(TAG, "A server exited unexpectedly (database, auth, world = $exited); restarting the realm")
+        lifecycle.execute {
+            try {
+                stopStack()
+                startStack()
+            } finally {
+                restarting = false
             }
         }
     }
@@ -180,6 +219,7 @@ class RealmService : Service() {
         // Normally already stopped via ACTION_STOP. If the system destroys us instead,
         // still shut the stack down cleanly; leftover processes are reaped on next start.
         lifecycle.execute { stopStack() }
+        watchdog.shutdownNow()
         lifecycle.shutdown()
         saves.shutdown()
         super.onDestroy()
@@ -255,6 +295,9 @@ class RealmService : Service() {
         /** Power-off broadcast some vendors (HTC, Xiaomi) send instead of ACTION_SHUTDOWN. */
         private const val ACTION_QUICKBOOT_POWEROFF = "android.intent.action.QUICKBOOT_POWEROFF"
         private const val MIN_SAVE_INTERVAL_MS = 60_000L
+        private const val WATCHDOG_SECONDS = 15L
+        private const val MAX_RESTARTS = 3
+        private val RESTART_WINDOW_MS = TimeUnit.MINUTES.toMillis(30)
         @Volatile private var instance: RealmService? = null
 
         /** Whether the service is up; cheaper than [currentStatus], which samples memory. */

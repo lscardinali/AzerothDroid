@@ -83,6 +83,21 @@ class NativeRuntime(private val context: Context) {
         fun isRunning(pid: Int, executable: String): Boolean =
             runCatching { File("/proc/$pid/cmdline").readText().contains(executable) }.getOrDefault(false)
 
+        /**
+         * Keeps the last [keepBytes] of an append-only log once it passes [maxBytes], so
+         * stdout logs kept across restarts do not grow without bound.
+         */
+        fun trimLog(file: File, maxBytes: Long = 4L shl 20, keepBytes: Int = 512 shl 10) {
+            if (!file.isFile || file.length() <= maxBytes) return
+            runCatching {
+                val tail = java.io.RandomAccessFile(file, "r").use { raf ->
+                    raf.seek(raf.length() - keepBytes)
+                    ByteArray(keepBytes).also { raf.readFully(it) }
+                }
+                file.writeBytes(tail)
+            }.onFailure { Log.w(TAG, "Could not trim ${file.name}", it) }
+        }
+
         /** SIGTERM for a clean shutdown, SIGKILL if it is still alive after [timeoutSec]. */
         fun terminate(pid: Int, executable: String, timeoutSec: Long) {
             if (!isRunning(pid, executable)) return

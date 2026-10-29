@@ -52,6 +52,7 @@ class AuthServer(context: Context, private val native: NativeRuntime, private va
             }
             writeConfig()
             pidFile.delete()
+            NativeRuntime.trimLog(stdoutFile)
             process = native.command(EXECUTABLE, "-c", configFile.path, home = root)
                 .redirectErrorStream(true)
                 .redirectOutput(ProcessBuilder.Redirect.appendTo(stdoutFile))
@@ -65,6 +66,19 @@ class AuthServer(context: Context, private val native: NativeRuntime, private va
             state = State.FAILED
             terminate()
         }
+    }
+
+    /**
+     * For the watchdog: true (once) if the process died while this server was meant to be
+     * up, e.g. killed by Android for memory. The server is then FAILED and can be started again.
+     */
+    fun checkExited(): Boolean {
+        if (state != State.RUNNING) return false
+        val pid = NativeRuntime.readPid(pidFile)
+        if (pid != null && NativeRuntime.isRunning(pid, EXECUTABLE)) return false
+        error = "Exited unexpectedly"
+        state = State.FAILED
+        return true
     }
 
     fun stop() {

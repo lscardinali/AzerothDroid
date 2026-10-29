@@ -58,6 +58,7 @@ class WorldServer(context: Context, private val native: NativeRuntime, private v
             }
             writeConfig(settings)
             pidFile.delete()
+            NativeRuntime.trimLog(stdoutFile)
             process = native.command(
                 EXECUTABLE, "-c", configFile.path,
                 home = root,
@@ -75,6 +76,19 @@ class WorldServer(context: Context, private val native: NativeRuntime, private v
             state = State.FAILED
             terminate()
         }
+    }
+
+    /**
+     * For the watchdog: true (once) if the process died while this server was meant to be
+     * up, e.g. killed by Android for memory. The server is then FAILED and can be started again.
+     */
+    fun checkExited(): Boolean {
+        if (state != State.RUNNING && state != State.PAUSED) return false
+        val pid = NativeRuntime.readPid(pidFile)
+        if (pid != null && NativeRuntime.isRunning(pid, EXECUTABLE)) return false
+        error = "Exited unexpectedly"
+        state = State.FAILED
+        return true
     }
 
     /** Freezes the running server; the kernel still queues new connections for [resume]. */
@@ -148,6 +162,9 @@ class WorldServer(context: Context, private val native: NativeRuntime, private v
             "Updates.CleanDeadRefMaxCount" to "-1",
             // Anti-cheat for public servers; costs CPU and memory per session.
             "Warden.Enabled" to "0",
+            // At most 100 world updates a second instead of 1000: plenty for play, far less
+            // CPU (and battery) when little is happening.
+            "MinWorldUpdateTime" to "10",
             // Android can kill the realm without warning; lose at most two minutes of play.
             "PlayerSaveInterval" to "120000",
         )

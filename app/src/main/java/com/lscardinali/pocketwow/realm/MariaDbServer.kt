@@ -65,6 +65,19 @@ class MariaDbServer(context: Context, private val native: NativeRuntime) {
     }
 
     /** Blocking: SIGTERM lets InnoDB flush and close cleanly; SIGKILL only after a timeout. */
+    /**
+     * For the watchdog: true (once) if the process died while this server was meant to be
+     * up, e.g. killed by Android for memory. The server is then FAILED and can be started again.
+     */
+    fun checkExited(): Boolean {
+        if (state != State.RUNNING) return false
+        val pid = NativeRuntime.readPid(pidFile)
+        if (pid != null && NativeRuntime.isRunning(pid, MARIADBD)) return false
+        error = "Exited unexpectedly"
+        state = State.FAILED
+        return true
+    }
+
     fun stop() {
         if (state == State.STOPPED) return
         state = State.STOPPING
@@ -134,6 +147,9 @@ class MariaDbServer(context: Context, private val native: NativeRuntime) {
             innodb-log-file-size=48M
             innodb-use-native-aio=0
             innodb-flush-neighbors=0
+            # Commits reach the OS at once and the disk about once a second: a killed process
+            # loses nothing, a sudden power loss at most a second. Fewer flash writes.
+            innodb-flush-log-at-trx-commit=2
             host-cache-size=0
 
             [client]
@@ -162,6 +178,7 @@ class MariaDbServer(context: Context, private val native: NativeRuntime) {
     private fun launch() {
         pidFile.delete()
         socket.delete()
+        NativeRuntime.trimLog(logFile)
         process = command(MARIADBD, "--defaults-file=${configFile.path}")
             .redirectErrorStream(true)
             .redirectOutput(ProcessBuilder.Redirect.appendTo(logFile))
