@@ -139,12 +139,21 @@ class AuthServer(context: Context, private val native: NativeRuntime, private va
         const val PORT = 3724
 
         /** Replaces `Key = value` lines of an AzerothCore .conf.dist; quotes string values. */
-        fun applyOverrides(conf: String, overrides: Map<String, String>): String =
-            overrides.entries.fold(conf) { text, (key, value) ->
+        /**
+         * Replaces each [overrides] key's line in [conf] (a missing key is an error, so typos
+         * fail loudly) and appends [additions]: keys our patches add, absent from the dist.
+         */
+        fun applyOverrides(conf: String, overrides: Map<String, String>, additions: Map<String, String> = emptyMap()): String {
+            val replaced = overrides.entries.fold(conf) { text, (key, value) ->
                 val line = Regex("""^${Regex.escape(key)}\s*=.*$""", RegexOption.MULTILINE)
                 check(line.containsMatchIn(text)) { "config key $key not found" }
-                val quoted = if (value.toLongOrNull() != null) value else "\"$value\""
-                text.replace(line, Regex.escapeReplacement("$key = $quoted"))
+                text.replace(line, Regex.escapeReplacement("$key = ${quote(value)}"))
             }
+            if (additions.isEmpty()) return replaced
+            return replaced.trimEnd() + "\n\n# PocketWoW patches\n" +
+                additions.entries.joinToString("") { (key, value) -> "$key = ${quote(value)}\n" }
+        }
+
+        private fun quote(value: String) = if (value.toLongOrNull() != null) value else "\"$value\""
     }
 }

@@ -1,0 +1,80 @@
+diff --git a/src/server/game/World/World.cpp b/src/server/game/World/World.cpp
+index ab661b1..df196a0 100644
+--- a/src/server/game/World/World.cpp
++++ b/src/server/game/World/World.cpp
+@@ -452,24 +452,32 @@ void World::SetInitialWorldSettings()
+     LOG_INFO("server.loading", "Loading Instances...");
+     sInstanceSaveMgr->LoadInstances();
+ 
++    // Translations for non-enUS clients take a few hundred MB. Servers whose players all use
++    // English clients can skip them (Locales.Load = 0); other clients then see English text.
++    bool const loadLocales = sConfigMgr->GetOption<bool>("Locales.Load", true);
++
+     LOG_INFO("server.loading", "Loading Broadcast Texts...");
+     sObjectMgr->LoadBroadcastTexts();
+-    sObjectMgr->LoadBroadcastTextLocales();
++    if (loadLocales)
++        sObjectMgr->LoadBroadcastTextLocales();
+ 
+     LOG_INFO("server.loading", "Loading Localization Strings...");
+     uint32 oldMSTime = getMSTime();
+-    sObjectMgr->LoadCreatureLocales();
+-    sObjectMgr->LoadGameObjectLocales();
+-    sObjectMgr->LoadItemLocales();
+-    sObjectMgr->LoadItemSetNameLocales();
+-    sObjectMgr->LoadQuestLocales();
+-    sObjectMgr->LoadQuestOfferRewardLocale();
+-    sObjectMgr->LoadQuestRequestItemsLocale();
+-    sObjectMgr->LoadNpcTextLocales();
+-    sObjectMgr->LoadPageTextLocales();
+-    sObjectMgr->LoadGossipMenuItemsLocales();
+-    sObjectMgr->LoadPointOfInterestLocales();
+-    sObjectMgr->LoadPetNamesLocales();
++    if (loadLocales)
++    {
++        sObjectMgr->LoadCreatureLocales();
++        sObjectMgr->LoadGameObjectLocales();
++        sObjectMgr->LoadItemLocales();
++        sObjectMgr->LoadItemSetNameLocales();
++        sObjectMgr->LoadQuestLocales();
++        sObjectMgr->LoadQuestOfferRewardLocale();
++        sObjectMgr->LoadQuestRequestItemsLocale();
++        sObjectMgr->LoadNpcTextLocales();
++        sObjectMgr->LoadPageTextLocales();
++        sObjectMgr->LoadGossipMenuItemsLocales();
++        sObjectMgr->LoadPointOfInterestLocales();
++        sObjectMgr->LoadPetNamesLocales();
++    }
+ 
+     sObjectMgr->SetDBCLocaleIndex(GetDefaultDbcLocale());        // Get once for all the locale index of DBC language (console/broadcasts)
+     LOG_INFO("server.loading", ">> Localization Strings loaded in {} ms", GetMSTimeDiffToNow(oldMSTime));
+@@ -625,7 +633,8 @@ void World::SetInitialWorldSettings()
+     LOG_INFO("server.loading", "Loading Quest Greetings...");
+     sObjectMgr->LoadQuestGreetings();                               // must be loaded after creature_template, gameobject_template tables
+     LOG_INFO("server.loading", "Loading Quest Greeting Locales...");
+-    sObjectMgr->LoadQuestGreetingsLocales();                        // must be loaded after creature_template, gameobject_template tables, quest_greeting
++    if (loadLocales)
++        sObjectMgr->LoadQuestGreetingsLocales();                        // must be loaded after creature_template, gameobject_template tables, quest_greeting
+ 
+     LOG_INFO("server.loading", "Loading Quest Money Rewards...");
+     sObjectMgr->LoadQuestMoneyRewards();
+@@ -744,7 +753,8 @@ void World::SetInitialWorldSettings()
+     LOG_INFO("server.loading", "Loading Achievement Rewards...");
+     sAchievementMgr->LoadRewards();
+     LOG_INFO("server.loading", "Loading Achievement Reward Locales...");
+-    sAchievementMgr->LoadRewardLocales();
++    if (loadLocales)
++        sAchievementMgr->LoadRewardLocales();
+     LOG_INFO("server.loading", "Loading Completed Achievements...");
+     sAchievementMgr->LoadCompletedAchievements();
+ 
+@@ -878,7 +888,8 @@ void World::SetInitialWorldSettings()
+     sCreatureTextMgr->LoadCreatureTextOptions();
+ 
+     LOG_INFO("server.loading", "Loading Creature Text Locales...");
+-    sCreatureTextMgr->LoadCreatureTextLocales();
++    if (loadLocales)
++        sCreatureTextMgr->LoadCreatureTextLocales();
+ 
+     LOG_INFO("server.loading", "Loading Scripts...");
+     sScriptMgr->LoadDatabase();

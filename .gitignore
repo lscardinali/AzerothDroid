@@ -16,3 +16,6 @@ native/src/
 native/.build/
 
 __pycache__/
+
+# Agent worktrees
+.claude/worktrees/

@@ -1,0 +1,42 @@
+diff --git a/src/server/scripts/Commands/cs_debug.cpp b/src/server/scripts/Commands/cs_debug.cpp
+index 9df9d39..a264269 100644
+--- a/src/server/scripts/Commands/cs_debug.cpp
++++ b/src/server/scripts/Commands/cs_debug.cpp
+@@ -114,6 +114,7 @@ public:
+             { "objectcount",    HandleDebugObjectCountCommand,         rbac::RBAC_PERM_COMMAND_DEBUG_INFO,     Console::Yes},
+             { "dummy",          HandleDebugDummyCommand,               rbac::RBAC_PERM_COMMAND_DEBUG,          Console::No },
+             { "mapdata",        HandleDebugMapDataCommand,             rbac::RBAC_PERM_COMMAND_DEBUG_INFO,     Console::No },
++            { "grids",          HandleDebugGridsCommand,               rbac::RBAC_PERM_COMMAND_DEBUG_INFO,     Console::Yes},
+             { "boundary",       HandleDebugBoundaryCommand,            rbac::RBAC_PERM_COMMAND_DEBUG_COSMETIC, Console::No },
+             { "visibilitydata", HandleDebugVisibilityDataCommand,      rbac::RBAC_PERM_COMMAND_DEBUG_INFO,     Console::No },
+             { "factionchange",  HandleDebugFactionChangeCommand,       rbac::RBAC_PERM_COMMAND_DEBUG_INFO,     Console::Yes},
+@@ -1547,6 +1548,29 @@ public:
+         return true;
+     }
+ 
++    // Grids created (terrain loaded) and loaded (objects spawned) per map, and this
++    // process's memory: grids are never unloaded, so this is what grows as players roam.
++    static bool HandleDebugGridsCommand(ChatHandler* handler)
++    {
++        uint32 created = 0, loaded = 0;
++        sMapMgr->DoForAllMaps([&](Map* map)
++        {
++            if (!map->GetCreatedGridsCount())
++                return;
++            created += map->GetCreatedGridsCount();
++            loaded += map->GetLoadedGridsCount();
++            handler->PSendSysMessage("Map {} ({}, instance {}): {} created, {} loaded grids", map->GetId(),
++                map->GetMapName(), map->GetInstanceId(), map->GetCreatedGridsCount(), map->GetLoadedGridsCount());
++        });
++        handler->PSendSysMessage("Total: {} created, {} loaded grids", created, loaded);
++
++        std::ifstream status("/proc/self/status");
++        for (std::string line; std::getline(status, line);)
++            if (line.starts_with("VmRSS") || line.starts_with("VmSwap") || line.starts_with("VmHWM"))
++                handler->SendSysMessage(line);
++        return true;
++    }
++
+     static bool HandleDebugMapDataCommand(ChatHandler* handler)
+     {
+         Cell cell(handler->GetPlayer()->GetPositionX(), handler->GetPlayer()->GetPositionY());

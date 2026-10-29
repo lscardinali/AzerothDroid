@@ -120,8 +120,20 @@ class WorldServer(context: Context, private val native: NativeRuntime, private v
             "SOAP.Port" to SOAP_PORT.toString(),
             // data/sql/archive is not bundled; drop its rows from the updates table.
             "Updates.CleanDeadRefMaxCount" to "-1",
+            // Anti-cheat for public servers; costs CPU and memory per session.
+            "Warden.Enabled" to "0",
+            // Android can kill the realm without warning; lose at most two minutes of play.
+            "PlayerSaveInterval" to "120000",
+            // Bots cannot navigate the battle, and its active objects keep Northrend grids loaded.
+            "Wintergrasp.Enable" to "2",
         )
-        configFile.writeText(AuthServer.applyOverrides(worldDist.readText(), world))
+        val additions = mapOf(
+            // Patch 0008: English clients only, skip a few hundred MB of translations.
+            "Locales.Load" to "0",
+            // Patch 0011: patrols far from every player would load grid after grid.
+            "Creatures.WaypointUpdatesWithoutPlayers" to "0",
+        )
+        configFile.writeText(AuthServer.applyOverrides(worldDist.readText(), world, additions))
 
         val botOverrides = bots.overrides() +
             ("PlayerbotsDatabaseInfo" to "127.0.0.1;${MariaDbServer.PORT};acore;acore;acore_playerbots")

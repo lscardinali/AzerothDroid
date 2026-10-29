@@ -127,7 +127,7 @@ class MariaDbServer(context: Context, private val native: NativeRuntime) {
             collation-server=utf8mb4_unicode_ci
             max-connections=50
             performance-schema=OFF
-            innodb-buffer-pool-size=128M
+            innodb-buffer-pool-size=48M
             innodb-log-file-size=48M
             innodb-use-native-aio=0
             innodb-flush-neighbors=0

@@ -20,16 +20,28 @@ data class PlayerbotsConfig(
     val guilds: Int,
     /** Accounts reserved for the addclass command, 10 characters each, created on start. */
     val addClassAccounts: Int,
+    /**
+     * Bots teleport to the zone of a real player and match their level. Bots everywhere load
+     * grids everywhere, and loaded grids are never freed.
+     */
+    val stayNearPlayers: Boolean,
+    /** Bots log in only while a real player is online, and log out a while after. */
+    val onlyWithRealPlayers: Boolean,
 ) {
     fun overrides(): Map<String, String> = mapOf(
         "Playerbots.MinRandomBots" to randomBots.toString(),
         "Playerbots.MaxRandomBots" to randomBots.toString(),
         "Playerbots.RandomBotsPerInterval" to botsPerInterval.toString(),
         "Playerbots.BotActiveAlone" to activeAlonePercent.toString(),
-        "Playerbots.RandomBotJoinBG" to (if (joinBattlegrounds) "1" else "0"),
+        "Playerbots.RandomBotJoinBG" to flag(joinBattlegrounds),
         "Playerbots.RandomBotGuildCount" to guilds.toString(),
         "Playerbots.AddClassAccountPoolSize" to addClassAccounts.toString(),
+        "Playerbots.RandomBotConcentrateInPlayerZone" to flag(stayNearPlayers),
+        "Playerbots.SyncLevelWithPlayers" to flag(stayNearPlayers),
+        "Playerbots.DisabledWithoutRealPlayer" to flag(onlyWithRealPlayers),
     )
+
+    private fun flag(value: Boolean) = if (value) "1" else "0"
 
     companion object {
         val MODEST = PlayerbotsConfig(
@@ -39,6 +51,8 @@ data class PlayerbotsConfig(
             joinBattlegrounds = false,
             guilds = 0,
             addClassAccounts = 1,
+            stayNearPlayers = true,
+            onlyWithRealPlayers = true,
         )
     }
 }

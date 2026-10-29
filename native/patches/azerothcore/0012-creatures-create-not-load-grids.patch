@@ -1,0 +1,47 @@
+diff --git a/src/server/game/Maps/Map.cpp b/src/server/game/Maps/Map.cpp
+index ba4c57e..9b77f09 100644
+--- a/src/server/game/Maps/Map.cpp
++++ b/src/server/game/Maps/Map.cpp
+@@ -823,6 +823,14 @@ void Map::PlayerRelocation(Player* player, float x, float y, float z, float o)
+     player->UpdateObjectVisibility(false);
+ }
+ 
++// Grids are never unloaded, and loading one spawns its creatures, some of which wander into the
++// next grid. A creature no player drives only creates the grid it walks into (terrain, as for
++// AddToMap of an inactive object); its objects load once a player comes near.
++static bool LoadsGridObjects(Creature const* creature)
++{
++    return creature->isActiveObject() || creature->IsCharmedOwnedByPlayerOrPlayer();
++}
++
+ void Map::CreatureRelocation(Creature* creature, float x, float y, float z, float o)
+ {
+     Cell old_cell = creature->GetCurrentCell();
+@@ -833,7 +841,12 @@ void Map::CreatureRelocation(Creature* creature, float x, float y, float z, floa
+     if (cellChanged)
+     {
+         if (old_cell.DiffGrid(new_cell))
+-            EnsureGridLoaded(new_cell);
++        {
++            if (LoadsGridObjects(creature))
++                EnsureGridLoaded(new_cell);
++            else
++                EnsureGridCreated(GridCoord(new_cell.GridX(), new_cell.GridY()));
++        }
+ 
+         AddCreatureToMoveList(creature);
+     }
+@@ -975,7 +988,12 @@ void Map::MoveAllCreaturesInMoveList()
+ 
+         c->RemoveFromGrid();
+         if (old_cell.DiffGrid(new_cell))
+-            EnsureGridLoaded(new_cell);
++        {
++            if (LoadsGridObjects(c))
++                EnsureGridLoaded(new_cell);
++            else
++                EnsureGridCreated(GridCoord(new_cell.GridX(), new_cell.GridY()));
++        }
+         AddToGrid(c, new_cell);
+     }
+     _creaturesToMove.clear();

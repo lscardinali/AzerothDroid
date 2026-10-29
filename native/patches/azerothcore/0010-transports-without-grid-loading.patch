@@ -1,0 +1,41 @@
+diff --git a/src/server/game/Entities/Transport/Transport.cpp b/src/server/game/Entities/Transport/Transport.cpp
+index 5204d26..fdbfd8c 100644
+--- a/src/server/game/Entities/Transport/Transport.cpp
++++ b/src/server/game/Entities/Transport/Transport.cpp
+@@ -31,6 +31,7 @@
+ #include "Spell.h"
+ #include "Vehicle.h"
+ #include "WorldModel.h"
++#include <algorithm>
+ #include <chrono>
+ 
+ namespace
+@@ -332,7 +333,13 @@ void MotionTransport::DelayedUpdate(uint32  /*diff*/)
+ 
+ void MotionTransport::UpdatePosition(float x, float y, float z, float o)
+ {
+-    if (!GetMap()->IsGridLoaded(x, y)) // pussywizard: should not happen, but just in case
++    // Grids are never unloaded, so a transport that loads every grid on its route keeps the
++    // whole route in memory. Only load them for players aboard; otherwise the transport moves
++    // through unloaded grids without its crew, which spawns again once the grid is loaded.
++    bool const playerAboard = std::any_of(_passengers.begin(), _passengers.end(),
++                                          [](WorldObject const* passenger) { return passenger->IsPlayer(); });
++    bool const gridLoaded = GetMap()->IsGridLoaded(x, y);
++    if (!gridLoaded && playerAboard)
+         GetMap()->LoadGrid(x, y);
+ 
+     Relocate(x, y, z, o);
+@@ -340,6 +347,13 @@ void MotionTransport::UpdatePosition(float x, float y, float z, float o)
+ 
+     UpdatePassengerPositions(_passengers);
+ 
++    if (!gridLoaded && !playerAboard)
++    {
++        if (!_staticPassengers.empty())
++            UnloadStaticPassengers();
++        return;
++    }
++
+     if (_staticPassengers.empty())
+         LoadStaticPassengers();
+     else

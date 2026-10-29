@@ -14,7 +14,12 @@ import java.security.SecureRandom
 class Accounts(private val database: MariaDbServer) {
 
     /** Creates [name] (with GM level 3 when [gm]) and returns its account id. */
-    fun create(name: String, password: String, gm: Boolean): Int {
+    fun create(name: String, password: String, gm: Boolean): Int = write(name, password, gm, replace = false)
+
+    /** Creates [name] as a GM, or resets its password if it exists. For the app's own accounts. */
+    fun ensureGm(name: String, password: String): Int = write(name, password, gm = true, replace = true)
+
+    private fun write(name: String, password: String, gm: Boolean, replace: Boolean): Int {
         val username = name.uppercase()
         val pass = password.uppercase()
         require(NAME.matches(username)) { "Name: 1-16 letters or digits" }
@@ -23,12 +28,13 @@ class Accounts(private val database: MariaDbServer) {
         }
         val salt = ByteArray(32).also { SecureRandom().nextBytes(it) }
         val verifier = verifier(username, pass, salt)
+        val onDuplicate = if (replace) " ON DUPLICATE KEY UPDATE salt = VALUES(salt), verifier = VALUES(verifier)" else ""
         val output = database.execute(
             """
             INSERT INTO acore_auth.account (username, salt, verifier, expansion, reg_mail, email, joindate)
-                VALUES ('$username', 0x${salt.hex()}, 0x${verifier.hex()}, 2, '', '', NOW());
-            SET @id = LAST_INSERT_ID();
-            ${if (gm) "INSERT INTO acore_auth.account_access (id, gmlevel, RealmID) VALUES (@id, 3, -1);" else ""}
+                VALUES ('$username', 0x${salt.hex()}, 0x${verifier.hex()}, 2, '', '', NOW())$onDuplicate;
+            SET @id = (SELECT id FROM acore_auth.account WHERE username = '$username');
+            ${if (gm) "INSERT IGNORE INTO acore_auth.account_access (id, gmlevel, RealmID) VALUES (@id, 3, -1);" else ""}
             SELECT @id;
             """.trimIndent(),
         )
@@ -37,7 +43,8 @@ class Accounts(private val database: MariaDbServer) {
 
     fun list(): List<String> = database
         .execute("SELECT username FROM acore_auth.account ORDER BY id;")
-        .lines().drop(1).filter { it.isNotBlank() && !it.startsWith(BOT_PREFIX, ignoreCase = true) }
+        .lines().drop(1)
+        .filter { it.isNotBlank() && !it.startsWith(BOT_PREFIX, ignoreCase = true) && it != WorldConsole.ACCOUNT }
 
     companion object {
         private val NAME = Regex("[A-Z0-9]{1,16}")

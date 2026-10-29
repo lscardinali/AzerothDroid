@@ -1,0 +1,33 @@
+diff --git a/src/server/game/Entities/Creature/Creature.cpp b/src/server/game/Entities/Creature/Creature.cpp
+index 2182bd8..396f080 100644
+--- a/src/server/game/Entities/Creature/Creature.cpp
++++ b/src/server/game/Entities/Creature/Creature.cpp
+@@ -19,6 +19,7 @@
+ #include "BattlegroundMgr.h"
+ #include "CellImpl.h"
+ #include "Common.h"
++#include "Config.h"
+ #include "CreatureAI.h"
+ #include "CreatureAISelector.h"
+ #include "CreatureGroups.h"
+@@ -4013,10 +4014,18 @@ bool Creature::IsUpdateNeeded()
+     if (ToTempSummon())
+         return true;
+ 
+-    if (GetMotionMaster()->HasMovementGeneratorType(WAYPOINT_MOTION_TYPE))
++    if (HasUnitState(UNIT_STATE_EVADE))
+         return true;
+ 
+-    if (HasUnitState(UNIT_STATE_EVADE))
++    // Patrols keep walking far from players by default. Grids are never unloaded and every grid
++    // they walk into loads more patrols, so on small servers this spreads across whole continents;
++    // with Creatures.WaypointUpdatesWithoutPlayers = 0 they pause until a player is near.
++    static bool const updateWithoutPlayers =
++        sConfigMgr->GetOption<bool>("Creatures.WaypointUpdatesWithoutPlayers", true);
++    if (!updateWithoutPlayers)
++        return false;
++
++    if (GetMotionMaster()->HasMovementGeneratorType(WAYPOINT_MOTION_TYPE))
+         return true;
+ 
+     if (m_formation && m_formation->GetLeader() != this)
