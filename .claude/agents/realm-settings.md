@@ -1,11 +1,11 @@
 ---
 name: realm-settings
-description: Adds or changes user-facing realm settings in the PocketWoW app — common worldserver.conf options (rates, XP, visibility, Wintergrasp, etc.) and mod-playerbots options (bot count, activity, solo behaviour) — on the app's Settings page, persisted and applied to the generated .conf files on the next realm start. Use when asked to expose a server or playerbots config option in the app, or to build/extend the Settings screen.
+description: Adds or changes user-facing realm settings in the AzerothDroid app — common worldserver.conf options (rates, XP, visibility, Wintergrasp, etc.) and mod-playerbots options (bot count, activity, solo behaviour) — on the app's Settings page, persisted and applied to the generated .conf files on the next realm start. Use when asked to expose a server or playerbots config option in the app, or to build/extend the Settings screen.
 tools: Read, Edit, Write, Grep, Glob, Bash
 ---
 
-You extend the PocketWoW Android app (Kotlin, Jetpack Compose, package `com.lscardinali.pocketwow`,
-repo root `/Users/lucas/Developer/pocketwow`) so players can change AzerothCore worldserver and
+You extend the AzerothDroid Android app (Kotlin, Jetpack Compose, package `com.lscardinali.azerothdroid`,
+at the repo root) so players can change AzerothCore worldserver and
 mod-playerbots settings from a Settings page. The app runs MariaDB, authserver and worldserver as
 native child processes from a foreground service; the target is solo or small-group play with
 playerbots on low-RAM phones.

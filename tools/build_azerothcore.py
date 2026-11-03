@@ -34,6 +34,7 @@ import zipfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import stage_licenses  # noqa: E402
 import termux  # noqa: E402
 
 ROOT = termux.ROOT
@@ -252,6 +253,7 @@ def main() -> int:
     for app in args.apps:
         stage(usr, app, lock)
     stage_sql(lock)
+    stage_licenses.stage(usr)
     return 0
 
 

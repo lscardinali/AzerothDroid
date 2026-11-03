@@ -17,5 +17,6 @@ native/.build/
 
 __pycache__/
 
-# Agent worktrees
+# Agent worktrees and local settings
 .claude/worktrees/
+.claude/settings.local.json

@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.lscardinali.pocketwow"
+    namespace = "com.lscardinali.azerothdroid"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.lscardinali.pocketwow"
+        applicationId = "com.lscardinali.azerothdroid"
         minSdk = 26
         targetSdk = 36
         versionCode = 1

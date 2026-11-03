@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "PocketWoW"
+rootProject.name = "AzerothDroid"
 include(":app")

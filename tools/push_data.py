@@ -29,7 +29,7 @@ from urllib.request import Request, urlopen
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "native" / "src" / "azerothcore"
 CACHE = ROOT / "native" / ".cache" / "client-data"
-PACKAGE = "com.lscardinali.pocketwow"
+PACKAGE = "com.lscardinali.azerothdroid"
 REMOTE = "files"  # relative to the app's data dir, as seen by run-as
 ADB = Path(os.environ.get("ANDROID_HOME", Path.home() / "Library/Android/sdk")) / "platform-tools" / "adb"
 
@@ -75,7 +75,7 @@ def fetch_client_data(version: str) -> Path:
         print(f"Downloading {url}")
         CACHE.mkdir(parents=True, exist_ok=True)
         partial = archive.with_suffix(".part")
-        with urlopen(Request(url, headers={"User-Agent": "pocketwow"}), timeout=120) as src, \
+        with urlopen(Request(url, headers={"User-Agent": "azerothdroid"}), timeout=120) as src, \
                 partial.open("wb") as dst:
             total = int(src.headers.get("Content-Length", 0))
             done = 0

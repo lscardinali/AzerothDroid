@@ -1,0 +1,68 @@
+# Weekly check for new AzerothCore (Playerbot branch) and mod-playerbots commits.
+# Opens or refreshes a pull request when the patches still apply, and an issue when they don't.
+# Nothing merges by itself: a pull request here still needs a native build and a play test.
+#
+# Repository setting needed: Settings > Actions > General > Workflow permissions >
+# "Allow GitHub Actions to create and approve pull requests".
+name: Upstream updates
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: upstream-updates
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BRANCH: automation/upstream-updates
+      SUMMARY: /tmp/upstream-summary.md
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check upstream
+        id: update
+        run: |
+          status=0
+          python3 tools/update_upstream.py --summary "$SUMMARY" || status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          if [ "$status" -ne 0 ] && [ "$status" -ne 2 ]; then exit "$status"; fi
+
+      - name: Open or refresh the pull request
+        if: steps.update.outputs.status == '0'
+        run: |
+          if git diff --quiet -- tools/azerothcore.lock.json; then
+            echo "Nothing to update."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C "$BRANCH"
+          git commit -am "Update AzerothCore and mod-playerbots"
+          git push --force origin "$BRANCH"
+          number=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$number" ]; then
+            gh pr edit "$number" --body-file "$SUMMARY"
+          else
+            gh pr create --head "$BRANCH" --title "Update AzerothCore and mod-playerbots" --body-file "$SUMMARY"
+          fi
+
+      - name: Open or refresh the issue
+        if: steps.update.outputs.status == '2'
+        run: |
+          title="Upstream update needs patch changes"
+          number=$(gh issue list --state open --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$number" ]; then
+            gh issue edit "$number" --body-file "$SUMMARY"
+          else
+            gh issue create --title "$title" --body-file "$SUMMARY"
+          fi

@@ -65,7 +65,7 @@ def sha256(path: Path) -> str:
 def download(url: str, target: Path) -> None:
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp = target.with_suffix(target.suffix + ".part")
-    with urlopen(Request(url, headers={"User-Agent": "pocketwow"}), timeout=120) as src, tmp.open("wb") as dst:
+    with urlopen(Request(url, headers={"User-Agent": "azerothdroid"}), timeout=120) as src, tmp.open("wb") as dst:
         shutil.copyfileobj(src, dst)
     tmp.replace(target)
 
@@ -105,7 +105,7 @@ def load_lock(update: bool = False) -> dict:
         return lock
 
     print(f"Resolving against {INDEX_URL}")
-    with urlopen(Request(INDEX_URL, headers={"User-Agent": "pocketwow"}), timeout=120) as r:
+    with urlopen(Request(INDEX_URL, headers={"User-Agent": "azerothdroid"}), timeout=120) as r:
         index = _parse_index(r.read())
     packages = dict(pinned)
     queue = deque(ROOT_PACKAGES)
