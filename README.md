@@ -87,6 +87,9 @@ Build the app and install it on a connected device:
 ./gradlew :app:installDebug
 ```
 
+Or let GitHub build it: run the **Build APK** workflow from the Actions tab, or push a `v*` tag. It
+takes hours, and the APK and its source are attached to the run as artifacts.
+
 Everything the scripts produce goes into the ignored `native/` subfolders `src`, `out`, `.build`
 and `.cache`.
 
@@ -135,8 +138,17 @@ python3 tools/update_upstream.py --check
 ```
 
 Without `--check`, the script also updates the lockfile. MariaDB and the Termux libraries are pinned
-separately and updated by hand with `python3 tools/stage_mariadb.py --update`, since a database
-upgrade can affect existing saves.
+separately and updated by hand with `python3 tools/stage_mariadb.py --update`.
+
+### Updates and your data
+
+Installing a new APK over the old one keeps your accounts, characters and settings, as long as both
+are signed with the same key. On the next start, AzerothCore's own updater applies any new SQL files
+to the existing databases and records them in an `updates` table, as it does on any AzerothCore
+server. Uninstalling the app deletes the realm, so export characters first.
+
+The exception is a new MariaDB version. The app doesn't ship `mariadb-upgrade`, so moving an existing
+database to a new major MariaDB version isn't handled. Keep the pin unless you've tested that upgrade.
 
 ## Contributing
 

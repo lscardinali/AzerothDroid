@@ -1,0 +1,40 @@
+diff --git a/deps/readline/CMakeLists.txt b/deps/readline/CMakeLists.txt
+index f98f978..5eff757 100644
+--- a/deps/readline/CMakeLists.txt
++++ b/deps/readline/CMakeLists.txt
+@@ -10,7 +10,7 @@
+ # implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+ #
+ 
+-if( UNIX )
++if( UNIX AND NOT ANDROID )
+   # find Readline (terminal input library) includes and library
+   #
+   # READLINE_INCLUDE_DIR - where the directory containing the READLINE headers can be found
+diff --git a/src/server/apps/worldserver/CommandLine/CliRunnable.cpp b/src/server/apps/worldserver/CommandLine/CliRunnable.cpp
+index ad2b99d..83c055a 100644
+--- a/src/server/apps/worldserver/CommandLine/CliRunnable.cpp
++++ b/src/server/apps/worldserver/CommandLine/CliRunnable.cpp
+@@ -25,6 +25,16 @@
+ #include "World.h"
+ #include <fmt/core.h>
+ 
++#if defined(__ANDROID__)
++
++// Android gives the server no terminal: Console.Enable is off and commands arrive over SOAP.
++// Leaving the console out means the APK does not need to ship GNU Readline.
++void CliThread()
++{
++}
++
++#else
++
+ #if AC_PLATFORM == AC_PLATFORM_WINDOWS
+ #include <windows.h>
+ #include <iostream>
+@@ -239,3 +249,5 @@ void CliThread()
+         }
+     }
+ }
++
++#endif // __ANDROID__

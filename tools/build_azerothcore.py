@@ -2,7 +2,7 @@
 """Cross-compile AzerothCore (mod-playerbots fork) for Android arm64 and stage it.
 
 Builds with the NDK's clang, using Termux packages (tools/termux.py) as the sysroot for
-Boost, OpenSSL, libmariadb, readline and zlib, so none of them need cross-compiling here.
+Boost, OpenSSL, libmariadb and zlib, so none of them need cross-compiling here.
 Boost links statically; the rest are shared libraries shipped alongside MariaDB's.
 
 The core (mod-playerbots/azerothcore-wotlk `Playerbot` branch) and its modules are pinned
@@ -154,8 +154,6 @@ def configure(usr: Path, lock_termux: dict) -> None:
         f"-DOPENSSL_INCLUDE_DIR={usr / 'include'}",
         f"-DOPENSSL_CRYPTO_LIBRARY={libdir / 'libcrypto.so'}",
         f"-DOPENSSL_SSL_LIBRARY={libdir / 'libssl.so'}",
-        f"-DREADLINE_INCLUDE_DIR={usr / 'include'}",
-        f"-DREADLINE_LIBRARY={libdir / 'libreadline.so'}",
         # What to build: both servers, scripts and modules linked in statically.
         "-DAPPS_BUILD=all",
         "-DTOOLS_BUILD=none",

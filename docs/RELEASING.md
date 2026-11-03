@@ -4,18 +4,21 @@ The repository holds only our code and patches. An APK is different: it contains
 publishing one brings obligations the repository doesn't have. Work through this list for each
 release. This is engineering guidance, not legal advice.
 
+An artifact from the **Build APK** workflow counts too, because anyone with a GitHub account can
+download artifacts from a public repository.
+
 ## Provide the source
 
-GPL-2.0 requires the complete source for the binaries you distribute. For each release, attach or
-host alongside the APK:
+GPL-2.0 requires the complete source for the binaries you distribute. The **Build APK** workflow
+collects it with `tools/collect_sources.py` and attaches it as a second artifact:
 
-- this repository at the release tag, including `native/patches/`
+- this repository at the built commit, including `native/patches/`
 - the AzerothCore and mod-playerbots commits from `tools/azerothcore.lock.json`
-- source for every GPL or LGPL package from `tools/termux.lock.json`, at those versions: MariaDB,
-  Connector/C and Readline
+- MariaDB and Connector/C at the version in `tools/termux.lock.json`, with Termux's recipe
 
-Linking to someone else's repository isn't a dependable way to meet this, since it can change or
-disappear. Keep your own copies with the release.
+Artifacts expire after 30 days. For a lasting release, attach both the APK and this bundle to a
+GitHub release, so the source stays available as long as the APK does. Linking to someone else's
+repository isn't a dependable substitute, since it can change or disappear.
 
 ## Check the licence texts
 
@@ -26,9 +29,6 @@ disappear. Keep your own copies with the release.
 
 These come from how the upstream components combine. They only arise when binaries are distributed.
 
-- **Readline (GPL-3.0) in the world server, with GPL-2.0-only mod-playerbots.** These licences are
-  incompatible. The app never uses the world server's console (`Console.Enable` is off), so the
-  clean fix is a core patch that builds the world server without Readline.
 - **AGPL-3.0 files in AzerothCore, with GPL-2.0-only mod-playerbots.** Fifteen core files carry
   AGPL-3.0-or-later headers, including `Trainer.cpp` and `TC9Sidecar/`. Upstream's combined binary
   has this same question. Raise it with upstream rather than working around it here.
@@ -44,5 +44,10 @@ These come from how the upstream components combine. They only arise when binari
 
 ## Signing
 
-`app/build.gradle.kts` has no release signing configuration. Add one, and keep the keystore out of
-the repository.
+The workflow signs every APK with one key, from the `ANDROID_KEYSTORE_BASE64` and
+`ANDROID_KEYSTORE_PASSWORD` repository secrets. Android only updates an app in place when the key
+matches, so **losing this key means users can't update without uninstalling, which deletes their
+realm.** Keep a backup somewhere safe, and never commit it.
+
+To sign local builds with the same key, set `AZEROTHDROID_KEYSTORE` and
+`AZEROTHDROID_KEYSTORE_PASSWORD` before running Gradle.

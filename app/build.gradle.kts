@@ -11,7 +11,8 @@ android {
         applicationId = "com.lscardinali.azerothdroid"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
+        // CI passes its run number, so each build can install over the one before.
+        versionCode = System.getenv("AZEROTHDROID_VERSION_CODE")?.toInt() ?: 1
         versionName = "0.1.0"
 
         ndk {
@@ -19,9 +20,25 @@ android {
         }
     }
 
+    // Android only updates an app in place, keeping its realm data, when the signing key
+    // matches. Without this key set, builds use the machine's own debug key.
+    val sharedKeystore = System.getenv("AZEROTHDROID_KEYSTORE")
+    val sharedSigning = sharedKeystore?.let {
+        signingConfigs.create("shared") {
+            storeFile = file(it)
+            storePassword = System.getenv("AZEROTHDROID_KEYSTORE_PASSWORD")
+            keyAlias = "azerothdroid"
+            keyPassword = System.getenv("AZEROTHDROID_KEYSTORE_PASSWORD")
+        }
+    }
+
     buildTypes {
+        debug {
+            sharedSigning?.let { signingConfig = it }
+        }
         release {
             isMinifyEnabled = false
+            sharedSigning?.let { signingConfig = it }
         }
     }
 

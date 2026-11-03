@@ -39,7 +39,6 @@ its package repository:
 | MariaDB server and client | 13.0.2 | GPL-2.0 |
 | MariaDB Connector/C (`libmariadb`) | with MariaDB | LGPL-2.1-or-later |
 | OpenSSL, including its legacy provider | 3.6.5 | Apache-2.0 |
-| GNU Readline | 8.3.6 | GPL-3.0 |
 | Boost, linked statically | 1.92.0 | BSL-1.0 |
 | LLVM libc++ | NDK build, Termux package 30 | Apache-2.0 WITH LLVM-exception; Termux's package metadata lists NCSA, which older LLVM code uses |
 | bzip2 | 1.0.8 | bzip2-1.0.6 |

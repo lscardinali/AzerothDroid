@@ -20,6 +20,7 @@ from __future__ import annotations
 import gzip
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -47,7 +48,6 @@ ROOT_PACKAGES = [
     "mariadb",
     "boost", "boost-headers", "boost-static",
     "openssl", "zlib", "libbz2", "liblzma",
-    "readline",
 ]
 
 # Provided by Android itself; never bundled.
@@ -177,7 +177,8 @@ def sysroot(lock: dict) -> Path:
 # ---------------------------------------------------------------------------
 
 def _find_readelf() -> Path:
-    for base in [Path.home() / "Library/Android/sdk/ndk", Path("/opt/android-sdk/ndk")]:
+    sdk = Path(os.environ.get("ANDROID_HOME", Path.home() / "Library/Android/sdk"))
+    for base in [sdk / "ndk", Path("/opt/android-sdk/ndk")]:
         found = sorted(base.glob("*/toolchains/llvm/prebuilt/*/bin/llvm-readelf"))
         if found:
             return found[-1]

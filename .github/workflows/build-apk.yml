@@ -1,0 +1,88 @@
+# Cross-compiles the servers and builds a debug APK, kept as a workflow artifact for 30 days.
+# Runs on demand and for version tags, not on every push: a full native build takes hours.
+name: Build APK
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # GitHub stops hosted jobs at 6 hours; end first so the logs say why.
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      # The scripts use the newest NDK and CMake in the SDK, so leave only the pinned ones.
+      - name: Install Android toolchain
+        run: |
+          rm -rf "$ANDROID_HOME/ndk" "$ANDROID_HOME/cmake"
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdkmanager" --licenses > /dev/null || true
+          "$sdkmanager" "ndk;30.0.16248370" "cmake;4.1.2" "platforms;android-37.0" "build-tools;36.0.0"
+
+      # Termux's repository can drop old package versions; keep the pinned ones.
+      - uses: actions/cache@v6
+        with:
+          path: native/.cache
+          key: termux-${{ hashFiles('tools/termux.lock.json') }}
+
+      - name: Stage MariaDB
+        run: python3 tools/stage_mariadb.py
+
+      # Four jobs, not ninja's default six: the larger files need several GB of RAM each.
+      - name: Build AzerothCore and mod-playerbots
+        run: python3 tools/build_azerothcore.py --jobs 4
+
+      # One key for every build, so an update installs over the last one and keeps the realm's data.
+      - name: Restore signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::warning::No signing key (a fork?): this APK won't install over official builds."
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/azerothdroid.keystore"
+          echo "AZEROTHDROID_KEYSTORE=$RUNNER_TEMP/azerothdroid.keystore" >> "$GITHUB_ENV"
+
+      - name: Test and build the app
+        env:
+          AZEROTHDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          AZEROTHDROID_VERSION_CODE: ${{ github.run_number }}
+        run: ./gradlew :app:testDebugUnitTest :app:assembleDebug
+
+      # GPL-2.0 requires the matching source wherever the APK is offered.
+      - name: Collect source
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python3 tools/collect_sources.py
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: AzerothDroid-${{ github.ref_name }}-${{ github.sha }}
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+          if-no-files-found: error
+          compression-level: 0
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: AzerothDroid-source-${{ github.ref_name }}-${{ github.sha }}
+          path: native/.build/source-bundle/
+          retention-days: 30
+          if-no-files-found: error
+          compression-level: 0
