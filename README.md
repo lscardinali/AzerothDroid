@@ -12,8 +12,7 @@ around you, close to your level, so the world feels populated.
 
 > **Early project.** Tested and working on a Redmi A5 with a 3.3.5a client running on a PC, and on
 > the arm64 emulator. I'm waiting on a Retroid Pocket 6 to test next. A client on the same device is
-> the goal but hasn't been tested. The idle pause and controller navigation haven't been tested on a
-> real device either.
+> the goal but hasn't been tested. Controller navigation hasn't been tested on a real device either.
 
 > **Unofficial.** Not affiliated with or endorsed by Blizzard Entertainment, AzerothCore or
 > mod-playerbots. You need your own legally obtained game client; none is included.

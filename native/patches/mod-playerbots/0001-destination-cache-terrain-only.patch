@@ -1,16 +1,16 @@
 diff --git a/src/Mgr/Travel/TravelMgr.cpp b/src/Mgr/Travel/TravelMgr.cpp
-index 02db385..6f0bb12 100644
+index 4e863501..85241903 100644
 --- a/src/Mgr/Travel/TravelMgr.cpp
 +++ b/src/Mgr/Travel/TravelMgr.cpp
-@@ -10,6 +10,7 @@
- #include "ChatHelper.h"
+@@ -12,6 +12,7 @@
  #include "Corpse.h"
  #include "Creature.h"
+ #include "GameEventMgr.h"
 +#include "GridTerrainData.h"
  #include "Log.h"
  #include "Map.h"
  #include "MapCollisionData.h"
-@@ -24,7 +25,9 @@
+@@ -26,7 +27,9 @@
  #include "VMapFactory.h"
  #include "VMapMgr2.h"
  #include <iomanip>
@@ -20,11 +20,12 @@ index 02db385..6f0bb12 100644
  
  // Navigation data
  
-@@ -4655,8 +4658,26 @@ void TravelMgr::PrepareDestinationCache()
+@@ -4718,8 +4721,26 @@ void TravelMgr::PrepareDestinationCache()
      // Temporary map to group creatures by entry and area
      std::map<std::tuple<uint16, int32, int32, int32>, std::vector<CreatureData>> tempLocsCache;
      std::map<uint32, std::map<uint32, std::vector<WorldLocation>>> tempCreatureCache;
 -    for (auto const& [guid, creatureData] : sObjectMgr->GetAllCreatureData())
+-    {
 +    // Zones come from each grid's .map file alone, one grid at a time. Map::GetAreaId would
 +    // create the grid, loading its map, vmap and mmap tiles, and grids are never unloaded:
 +    // for every grid with a creature on the bot maps, most of the world's terrain stays resident.
@@ -33,7 +34,7 @@ index 02db385..6f0bb12 100644
 +    for (SpawnEntry const& entry : sObjectMgr->GetAllCreatureData())
 +        spawns.push_back(&entry);
 +    auto gridKey = [](SpawnEntry const* entry)
-     {
++    {
 +        GridCoord const coord = Acore::ComputeGridCoord(entry->second.posX, entry->second.posY);
 +        return std::make_tuple(entry->second.mapid, coord.x_coord, coord.y_coord);
 +    };
@@ -48,7 +49,7 @@ index 02db385..6f0bb12 100644
          CreatureTemplate const* creatureTemplate = sObjectMgr->GetCreatureTemplate(creatureData.id);
          if (!creatureTemplate)
              continue;
-@@ -4672,11 +4693,22 @@ void TravelMgr::PrepareDestinationCache()
+@@ -4735,11 +4756,22 @@ void TravelMgr::PrepareDestinationCache()
          float orient = creatureData.orientation;
          uint32 templateEntry = creatureData.id;
  

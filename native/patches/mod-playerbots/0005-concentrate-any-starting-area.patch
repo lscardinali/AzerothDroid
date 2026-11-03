@@ -1,5 +1,5 @@
 diff --git a/conf/playerbots.conf.dist b/conf/playerbots.conf.dist
-index 3e037ab..f9101bc 100644
+index 987fb08e..c2db69cb 100644
 --- a/conf/playerbots.conf.dist
 +++ b/conf/playerbots.conf.dist
 @@ -747,6 +747,12 @@ Playerbots.SyncLevelWithPlayers = 0
@@ -16,10 +16,10 @@ index 3e037ab..f9101bc 100644
  # Default: 0 (disabled)
  Playerbots.PreQuests = 0
 diff --git a/src/Bot/RandomPlayerbotMgr.cpp b/src/Bot/RandomPlayerbotMgr.cpp
-index 2a1d318..6bec24e 100644
+index 4c644077..3cf9c82b 100644
 --- a/src/Bot/RandomPlayerbotMgr.cpp
 +++ b/src/Bot/RandomPlayerbotMgr.cpp
-@@ -1624,7 +1624,8 @@ void RandomPlayerbotMgr::Revive(Player* player)
+@@ -1635,7 +1635,8 @@ void RandomPlayerbotMgr::Revive(Player* player)
      RandomTeleportGrindForLevel(player);
  }
  
@@ -29,7 +29,7 @@ index 2a1d318..6bec24e 100644
  {
      // ignore when alrdy teleported or not in the world yet.
      if (bot->IsBeingTeleported() || !bot->IsInWorld())
-@@ -1724,7 +1725,7 @@ void RandomPlayerbotMgr::RandomTeleport(Player* bot, std::vector<WorldLocation>&
+@@ -1735,7 +1736,7 @@ void RandomPlayerbotMgr::RandomTeleport(Player* bot, std::vector<WorldLocation>&
  
          z = 0.05f + ground;
  
@@ -38,15 +38,15 @@ index 2a1d318..6bec24e 100644
              continue;
  
          LocaleConstant const& locale = sWorld->GetDefaultDbcLocale();
-@@ -1848,6 +1849,7 @@ void RandomPlayerbotMgr::RandomTeleportForLevel(Player* bot)
-     }
+@@ -1889,6 +1890,7 @@ void RandomPlayerbotMgr::RandomTeleportForLevel(Player* bot)
+ 
      std::vector<WorldLocation> locs = sTravelMgr.GetTeleportLocations(bot);
  
 +    bool toPlayerZone = false;
      if (sPlayerbotAIConfig.RandomBotConcentrateInPlayerZone && !locs.empty())
      {
          // No fitting spot in a player's zone: stay on a player's continent if possible. Players
-@@ -1855,14 +1857,17 @@ void RandomPlayerbotMgr::RandomTeleportForLevel(Player* bot)
+@@ -1896,14 +1898,17 @@ void RandomPlayerbotMgr::RandomTeleportForLevel(Player* bot)
          std::vector<WorldLocation> sameMapLocs;
          std::vector<WorldLocation> playerZoneLocs = GetPlayerZoneTeleportLocations(locs, bot, &sameMapLocs);
          if (!playerZoneLocs.empty())
@@ -65,7 +65,7 @@ index 2a1d318..6bec24e 100644
          return;
      }
  }
-@@ -1916,7 +1921,10 @@ std::vector<WorldLocation> RandomPlayerbotMgr::GetPlayerZoneTeleportLocations(st
+@@ -1957,7 +1962,10 @@ std::vector<WorldLocation> RandomPlayerbotMgr::GetPlayerZoneTeleportLocations(st
                        loc.GetMapId()) == sPlayerbotAIConfig.RandomBotMaps.end())
              continue;
  
@@ -78,10 +78,10 @@ index 2a1d318..6bec24e 100644
  
          if (inPlayerZone)
 diff --git a/src/Bot/RandomPlayerbotMgr.h b/src/Bot/RandomPlayerbotMgr.h
-index fb17b18..04291a3 100644
+index 38a6aca2..20ead77d 100644
 --- a/src/Bot/RandomPlayerbotMgr.h
 +++ b/src/Bot/RandomPlayerbotMgr.h
-@@ -245,7 +245,8 @@ private:
+@@ -276,7 +276,8 @@ private:
      bool ProcessBot(uint32 bot);
      void ScheduleRandomize(uint32 bot, uint32 time);
      void RandomTeleport(Player* bot);
@@ -92,10 +92,10 @@ index fb17b18..04291a3 100644
      void UpdatePlayerZones();
      std::vector<WorldLocation> GetPlayerZoneTeleportLocations(std::vector<WorldLocation> const& locs, Player* bot,
 diff --git a/src/PlayerbotAIConfig.cpp b/src/PlayerbotAIConfig.cpp
-index b9cf42c..b683b07 100644
+index a93946e6..5fa0a48a 100644
 --- a/src/PlayerbotAIConfig.cpp
 +++ b/src/PlayerbotAIConfig.cpp
-@@ -746,6 +746,8 @@ bool PlayerbotAIConfig::Initialize()
+@@ -767,6 +767,8 @@ bool PlayerbotAIConfig::Initialize()
      SyncLevelWithPlayers = sConfigMgr->GetOption<bool>("Playerbots.SyncLevelWithPlayers", false);
      RandomBotConcentrateInPlayerZone =
          sConfigMgr->GetOption<bool>("Playerbots.RandomBotConcentrateInPlayerZone", false);
@@ -105,10 +105,10 @@ index b9cf42c..b683b07 100644
  
      // arena
 diff --git a/src/PlayerbotAIConfig.h b/src/PlayerbotAIConfig.h
-index 84b0413..336c178 100644
+index 1ae939ac..ca28700b 100644
 --- a/src/PlayerbotAIConfig.h
 +++ b/src/PlayerbotAIConfig.h
-@@ -398,6 +398,7 @@ public:
+@@ -402,6 +402,7 @@ public:
      std::unordered_map<NewRpgStatus, uint32> RpgStatusProbWeight;
      bool SyncLevelWithPlayers;
      bool RandomBotConcentrateInPlayerZone;

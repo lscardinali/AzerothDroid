@@ -115,6 +115,7 @@ fun SettingsScreen(modifier: Modifier, primaryFocus: FocusRequester, realmRunnin
                     WorldCard(current.world, unparsed) { draft = current.copy(world = it) }
                 }
             }
+            AboutCard()
         }
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             errors.forEach { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
@@ -134,6 +135,25 @@ fun SettingsScreen(modifier: Modifier, primaryFocus: FocusRequester, realmRunnin
                 }) { Text("Reset to defaults") }
             }
         }
+    }
+}
+
+/** The notices the app's licences ask an interactive program to show. */
+@Composable
+private fun AboutCard() {
+    Panel("About", readable = true) {
+        Text(
+            "AzerothDroid is free software with no warranty, under the GNU GPL, version 2 or later. It includes " +
+                "AzerothCore, mod-playerbots, MariaDB and other software under their own licences, some of it " +
+                "AGPL-3.0. Licence texts are in the app's assets/licenses folder.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Text("Source code: https://github.com/lscardinali/AzerothDroid", style = MaterialTheme.typography.bodySmall)
+        Text(
+            "Unofficial. Not affiliated with or endorsed by Blizzard Entertainment.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

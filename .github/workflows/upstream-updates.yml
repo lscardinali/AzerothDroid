@@ -27,7 +27,7 @@ jobs:
       BRANCH: automation/upstream-updates
       SUMMARY: /tmp/upstream-summary.md
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Check upstream
         id: update

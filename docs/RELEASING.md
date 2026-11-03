@@ -23,7 +23,8 @@ repository isn't a dependable substitute, since it can change or disappear.
 ## Check the licence texts
 
 `tools/build_azerothcore.py` stages them and fails if one is missing. Confirm
-`assets/licenses/` is in the APK, and update `THIRD_PARTY_NOTICES.md` when versions change.
+`assets/licenses/` is in the APK, and update `THIRD_PARTY_NOTICES.md` when versions change. The
+Settings tab's About card shows the licence notice and a link to the source.
 
 ## Open licence questions
 

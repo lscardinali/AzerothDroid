@@ -74,6 +74,8 @@ def checkout_repo(path: Path, pin: dict, patches: Path) -> None:
         run("git", "clone", "--depth", "1", "--branch", pin["branch"], pin["repo"], path)
     head = subprocess.check_output(["git", "-C", str(path), "rev-parse", "HEAD"], text=True).strip()
     if head != pin["commit"]:
+        # Applied patches would block the checkout. Stash, not reset, so no edit is ever lost.
+        run("git", "-C", path, "stash", "push", "--quiet")
         run("git", "-C", path, "fetch", "--depth", "1", "origin", pin["commit"])
         run("git", "-C", path, "checkout", "--detach", pin["commit"])
     apply_patches(path, sorted(patches.glob("*.patch")))

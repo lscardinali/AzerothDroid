@@ -1,5 +1,5 @@
 diff --git a/conf/playerbots.conf.dist b/conf/playerbots.conf.dist
-index 5fa02b7..3e037ab 100644
+index ae09e115..987fb08e 100644
 --- a/conf/playerbots.conf.dist
 +++ b/conf/playerbots.conf.dist
 @@ -944,6 +944,12 @@ Playerbots.LevelBrackets.Dynamic.UseDynamicDistribution = 0
@@ -16,7 +16,7 @@ index 5fa02b7..3e037ab 100644
  # level bounds). All real players (regardless of faction) influence the dynamic distribution for
  # both factions.
 diff --git a/src/Bot/RandomBotLevelMgr.cpp b/src/Bot/RandomBotLevelMgr.cpp
-index d3ecf11..fd0bf9f 100644
+index d3ecf115..fd0bf9f7 100644
 --- a/src/Bot/RandomBotLevelMgr.cpp
 +++ b/src/Bot/RandomBotLevelMgr.cpp
 @@ -557,6 +557,33 @@ void RandomBotLevelMgr::ProcessFactionDistribution(TeamId team, uint32 totalBots
@@ -64,10 +64,10 @@ index d3ecf11..fd0bf9f 100644
          ApplyBracketWeights(_hordeRanges, hordeWeights);
  
 diff --git a/src/PlayerbotAIConfig.cpp b/src/PlayerbotAIConfig.cpp
-index 4653b64..b9cf42c 100644
+index 52578448..a93946e6 100644
 --- a/src/PlayerbotAIConfig.cpp
 +++ b/src/PlayerbotAIConfig.cpp
-@@ -821,6 +821,8 @@ void PlayerbotAIConfig::LoadRandomBotLevelConfig()
+@@ -842,6 +842,8 @@ void PlayerbotAIConfig::LoadRandomBotLevelConfig()
          sConfigMgr->GetOption<bool>("Playerbots.LevelBrackets.Dynamic.UseDynamicDistribution", false);
      LevelBracketsRealPlayerWeight =
          sConfigMgr->GetOption<float>("Playerbots.LevelBrackets.Dynamic.RealPlayerWeight", 1.0f);
@@ -77,10 +77,10 @@ index 4653b64..b9cf42c 100644
      LevelBracketsIgnoreFriendListed = sConfigMgr->GetOption<bool>("Playerbots.LevelBrackets.IgnoreFriendListed", true);
      LevelBracketsFlaggedProcessLimit =
 diff --git a/src/PlayerbotAIConfig.h b/src/PlayerbotAIConfig.h
-index 5e89efa..84b0413 100644
+index 8c53a7e6..1ae939ac 100644
 --- a/src/PlayerbotAIConfig.h
 +++ b/src/PlayerbotAIConfig.h
-@@ -503,6 +503,7 @@ public:
+@@ -507,6 +507,7 @@ public:
      std::vector<LevelBracketConfig> LevelBracketsHorde;
      bool LevelBracketsDynamicDistribution;
      float LevelBracketsRealPlayerWeight;

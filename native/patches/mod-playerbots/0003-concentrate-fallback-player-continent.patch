@@ -1,8 +1,8 @@
 diff --git a/src/Bot/RandomPlayerbotMgr.cpp b/src/Bot/RandomPlayerbotMgr.cpp
-index 51f37c0..18379f5 100644
+index 8f60b4f5..c9f5cf28 100644
 --- a/src/Bot/RandomPlayerbotMgr.cpp
 +++ b/src/Bot/RandomPlayerbotMgr.cpp
-@@ -1849,9 +1849,14 @@ void RandomPlayerbotMgr::RandomTeleportForLevel(Player* bot)
+@@ -1890,9 +1890,14 @@ void RandomPlayerbotMgr::RandomTeleportForLevel(Player* bot)
  
      if (sPlayerbotAIConfig.RandomBotConcentrateInPlayerZone && !locs.empty())
      {
@@ -18,7 +18,7 @@ index 51f37c0..18379f5 100644
      }
  
      if (!locs.empty())
-@@ -1866,7 +1871,8 @@ void RandomPlayerbotMgr::RandomTeleportForLevel(Player* bot)
+@@ -1907,7 +1912,8 @@ void RandomPlayerbotMgr::RandomTeleportForLevel(Player* bot)
  // vector when no player is online or none of the locations match, letting the caller fall back
  // to the default world-wide behaviour.
  std::vector<WorldLocation> RandomPlayerbotMgr::GetPlayerZoneTeleportLocations(std::vector<WorldLocation> const& locs,
@@ -28,7 +28,7 @@ index 51f37c0..18379f5 100644
  {
      std::set<std::pair<uint32, uint32>> playerMapZones;
      {
-@@ -1889,7 +1895,8 @@ std::vector<WorldLocation> RandomPlayerbotMgr::GetPlayerZoneTeleportLocations(st
+@@ -1930,7 +1936,8 @@ std::vector<WorldLocation> RandomPlayerbotMgr::GetPlayerZoneTeleportLocations(st
              continue;
  
          uint32 zoneId = sMapMgr->GetZoneId(PHASEMASK_NORMAL, loc);
@@ -38,7 +38,7 @@ index 51f37c0..18379f5 100644
              continue;
  
          // Skip enemy-faction zones, matching the check in RandomTeleport. This has to be done here:
-@@ -1911,7 +1918,10 @@ std::vector<WorldLocation> RandomPlayerbotMgr::GetPlayerZoneTeleportLocations(st
+@@ -1952,7 +1959,10 @@ std::vector<WorldLocation> RandomPlayerbotMgr::GetPlayerZoneTeleportLocations(st
          if (botAI && !botAI->StarterLevelDistanceCheck(bot, loc, true))
              continue;
  
@@ -51,10 +51,10 @@ index 51f37c0..18379f5 100644
  
      return filtered;
 diff --git a/src/Bot/RandomPlayerbotMgr.h b/src/Bot/RandomPlayerbotMgr.h
-index fba8f8a..142afc2 100644
+index 5b150c52..f4fa0a96 100644
 --- a/src/Bot/RandomPlayerbotMgr.h
 +++ b/src/Bot/RandomPlayerbotMgr.h
-@@ -245,7 +245,8 @@ private:
+@@ -276,7 +276,8 @@ private:
      void RandomTeleport(Player* bot, std::vector<WorldLocation>& locs, bool hearth = false);
      uint32 GetZoneLevel(uint16 mapId, float teleX, float teleY, float teleZ);
      void UpdatePlayerZones();
