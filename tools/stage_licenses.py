@@ -25,6 +25,9 @@ SOURCE_NOTICES = {
     "azerothcore-LICENSE.txt": "LICENSE",
     "azerothcore-dependencies.txt": "deps/PackageList.txt",
     "mod-playerbots-LICENSE.txt": "modules/mod-playerbots/LICENSE",
+    # mod-autobalance has no licence file; this source file carries its GPL notice.
+    "mod-autobalance-notice.txt": "modules/mod-autobalance/src/AutoBalance.cpp",
+    "mod-individual-progression-LICENSE.txt": "modules/mod-individual-progression/LICENSE",
     "argon2-LICENSE.txt": "deps/argon2/LICENSE",
     "fmt-LICENSE.txt": "deps/fmt/LICENSE",
     "g3dlite-license.cpp.txt": "deps/g3dlite/source/license.cpp",

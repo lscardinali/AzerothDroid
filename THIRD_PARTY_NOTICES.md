@@ -15,6 +15,8 @@ copyright notices come from its source or package.
 |---|---|---|
 | AzerothCore, `Playerbot` branch | GPL-2.0 (`LICENSE`). Source headers are mostly GPL-2.0-or-later; 15 files are AGPL-3.0-or-later. Copyright holders are listed in its `AUTHORS` file. | [mod-playerbots/azerothcore-wotlk](https://github.com/mod-playerbots/azerothcore-wotlk), a fork of [azerothcore/azerothcore-wotlk](https://github.com/azerothcore/azerothcore-wotlk) |
 | mod-playerbots | GPL-2.0 | [mod-playerbots/mod-playerbots](https://github.com/mod-playerbots/mod-playerbots) |
+| mod-autobalance | No licence file. `src/AutoBalance.cpp` carries a GPL notice, copied to `assets/licenses/`; the other files have no notice. | [azerothcore/mod-autobalance](https://github.com/azerothcore/mod-autobalance) |
+| mod-individual-progression | MIT (`LICENSE`), but 37 source files carry AGPL-3.0 headers | [ZhengPeiRu21/mod-individual-progression](https://github.com/ZhengPeiRu21/mod-individual-progression) |
 
 Compiled into the servers from AzerothCore's `deps/` directory:
 

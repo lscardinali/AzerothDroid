@@ -11,6 +11,8 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -40,7 +42,9 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -148,6 +152,7 @@ private fun App(tabSteps: Flow<Int>, onStart: () -> Unit, onStop: () -> Unit, on
     // Each tab hangs this on its primary control; tabs without one leave focus on the tab bar.
     val primaryFocus = remember(tab) { FocusRequester() }
     val tabFocus = remember { FocusRequester() }
+    val inputMode = LocalInputModeManager.current
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -163,7 +168,9 @@ private fun App(tabSteps: Flow<Int>, onStart: () -> Unit, onStop: () -> Unit, on
     LaunchedEffect(tab) {
         // Let the tab compose and attach its requester first.
         withFrameNanos {}
-        if (!primaryFocus.requestFocus(FocusDirection.Enter)) tabFocus.requestFocus()
+        // By touch, focus inside a tab only gets in the way: a focused text field opens the keyboard.
+        val entered = inputMode.inputMode == InputMode.Keyboard && primaryFocus.requestFocus(FocusDirection.Enter)
+        if (!entered) tabFocus.requestFocus()
     }
     BackHandler(enabled = tab != Tab.Realm) { tab = Tab.Realm }
 
@@ -211,7 +218,8 @@ private fun App(tabSteps: Flow<Int>, onStart: () -> Unit, onStop: () -> Unit, on
             }
         },
     ) { padding ->
-        val modifier = Modifier.padding(padding)
+        // Above the keyboard, so Settings' Save stays reachable while a field is being edited.
+        val modifier = Modifier.padding(padding).consumeWindowInsets(padding).imePadding()
         when (tab) {
             Tab.Realm -> RealmScreen(
                 modifier, primaryFocus, status, device, clientDataReady, dataPack.clientDataVersion, onStart, onStop, onSetup,

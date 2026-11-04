@@ -40,10 +40,15 @@ import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.InputMode
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.lscardinali.azerothdroid.realm.AutoBalanceConfig
+import com.lscardinali.azerothdroid.realm.DataPack
+import com.lscardinali.azerothdroid.realm.IndividualProgressionConfig
 import com.lscardinali.azerothdroid.realm.PlayerbotsConfig
 import com.lscardinali.azerothdroid.realm.RealmSettings
 import com.lscardinali.azerothdroid.realm.RealmSettingsStore
@@ -64,10 +69,13 @@ fun SettingsScreen(modifier: Modifier, primaryFocus: FocusRequester, realmRunnin
     val scope = rememberCoroutineScope()
     var draft by remember { mutableStateOf<RealmSettings?>(null) }
     LaunchedEffect(saved) { if (draft == null) draft = saved }
+    val progressionInstalled = remember { DataPack(context).optionalSqlApplied(IndividualProgressionConfig.MODULE) }
+    val inputMode = LocalInputModeManager.current
     // The draft arrives after the tab's first frame, too late for the tab bar's focus request.
     val loaded = draft != null
     LaunchedEffect(loaded) {
-        if (loaded) {
+        // A focused text field opens the keyboard on the next drag across it, so only for controllers.
+        if (loaded && inputMode.inputMode == InputMode.Keyboard) {
             withFrameNanos {}
             primaryFocus.requestFocus()
         }
@@ -113,6 +121,8 @@ fun SettingsScreen(modifier: Modifier, primaryFocus: FocusRequester, realmRunnin
                     BotWorldCard(current.bots, unparsed) { draft = current.copy(bots = it) }
                     RatesCard(current.world, unparsed) { draft = current.copy(world = it) }
                     WorldCard(current.world, unparsed) { draft = current.copy(world = it) }
+                    AutoBalanceCard(current.autoBalance, unparsed) { draft = current.copy(autoBalance = it) }
+                    ProgressionCard(current.progression, progressionInstalled, unparsed) { draft = current.copy(progression = it) }
                 }
             }
             AboutCard()
@@ -360,6 +370,105 @@ private fun WorldCard(world: WorldConfig, unparsed: SnapshotStateMap<String, Boo
             "View distance in dungeons", world.visibilityInstances, WorldConfig.VISIBILITY_RANGE, "yards", unparsed,
             memoryHeavy = true,
         ) { onChange(world.copy(visibilityInstances = it)) }
+    }
+}
+
+@Composable
+private fun AutoBalanceCard(config: AutoBalanceConfig, unparsed: SnapshotStateMap<String, Boolean>, onChange: (AutoBalanceConfig) -> Unit) {
+    SettingsCard("Dungeon scaling") {
+        Toggle("Scale dungeons and raids", "mod-autobalance: creatures match the number of players inside", config.enabled) {
+            onChange(config.copy(enabled = it))
+        }
+        if (!config.enabled) return@SettingsCard
+        IntSetting(
+            "Minimum players in dungeons", config.minPlayers, AutoBalanceConfig.PLAYERS_RANGE, "players", unparsed,
+            note = "Dungeons never get easier than this many players",
+        ) { onChange(config.copy(minPlayers = it)) }
+        IntSetting(
+            "Minimum players in raids", config.minPlayersRaid, AutoBalanceConfig.PLAYERS_RANGE, "players", unparsed,
+        ) { onChange(config.copy(minPlayersRaid = it)) }
+        IntSetting(
+            "Extra difficulty", config.difficultyOffset, AutoBalanceConfig.OFFSET_RANGE, "players", unparsed,
+            note = "Scales as if this many more players were inside",
+        ) { onChange(config.copy(difficultyOffset = it)) }
+        FloatSetting(
+            "Creature strength", config.statModifier, AutoBalanceConfig.STAT_RANGE, unparsed,
+            note = "1 = what the module calculates",
+        ) { onChange(config.copy(statModifier = it)) }
+        Toggle("Scale creature levels", "Creatures match the highest-level player inside", config.levelScaling) {
+            onChange(config.copy(levelScaling = it))
+        }
+        Toggle("Announce scaling changes", "A message when players enter or leave", config.announcePlayerChanges) {
+            onChange(config.copy(announcePlayerChanges = it))
+        }
+    }
+}
+
+@Composable
+private fun ProgressionCard(
+    config: IndividualProgressionConfig,
+    installed: Boolean,
+    unparsed: SnapshotStateMap<String, Boolean>,
+    onChange: (IndividualProgressionConfig) -> Unit,
+) {
+    SettingsCard("Individual progression") {
+        Text(
+            "mod-individual-progression: each character moves through Vanilla, TBC and WotLK content in order.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (config.enabled) {
+            OutlinedButton(
+                onClick = { onChange(config.copy(enabled = false)) },
+                modifier = Modifier.fillMaxWidth().focusRing(ButtonDefaults.shape),
+            ) { Text("Turn off") }
+        } else {
+            Button(
+                onClick = { onChange(config.copy(enabled = true)) },
+                modifier = Modifier.fillMaxWidth().focusRing(ButtonDefaults.shape),
+            ) { Text("Enable") }
+        }
+        Text(
+            if (installed) {
+                "Already installed on this realm, which cannot be reverted to its previous state. Turning it " +
+                    "off only stops its rules. The only way back is to uninstall the app, which also deletes " +
+                    "your characters and the client data."
+            } else {
+                "This cannot be undone. Once saved, the next realm start installs it by rewriting the world " +
+                    "database, and the realm cannot be reverted to its previous state. Turning it off later " +
+                    "only stops its rules. The only way back is to uninstall the app, which also deletes your " +
+                    "characters and the client data."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error,
+        )
+        if (!config.enabled) return@SettingsCard
+        IntSetting(
+            "Highest stage", config.progressionLimit, IndividualProgressionConfig.LIMIT_RANGE, "stage", unparsed,
+            note = "0 = no limit, 7 = stop at Vanilla, 13 = stop at TBC",
+        ) { onChange(config.copy(progressionLimit = it)) }
+        IntSetting(
+            "Starting stage", config.startingProgression, IndividualProgressionConfig.STAGE_RANGE, "stage", unparsed,
+            note = "0 = Vanilla, 8 = TBC, 13 = WotLK",
+        ) { onChange(config.copy(startingProgression = it)) }
+        FloatSetting(
+            "Player power in Vanilla", config.vanillaPower, IndividualProgressionConfig.POWER_RANGE, unparsed,
+            note = "1 = no change; the module suggests 0.5-0.6",
+        ) { onChange(config.copy(vanillaPower = it)) }
+        FloatSetting(
+            "Player power in TBC", config.tbcPower, IndividualProgressionConfig.POWER_RANGE, unparsed,
+            note = "1 = no change",
+        ) { onChange(config.copy(tbcPower = it)) }
+        Toggle("Adjust bots only", "In dungeons and raids, the power settings affect bots and not players", config.botOnlyAdjustments) {
+            onChange(config.copy(botOnlyAdjustments = it))
+        }
+        Toggle("Group only with the same stage", null, config.enforceGroupRules) { onChange(config.copy(enforceGroupRules = it)) }
+        Toggle("Turn off Random Dungeon Finder", null, config.disableRandomDungeonFinder) {
+            onChange(config.copy(disableRandomDungeonFinder = it))
+        }
+        Toggle("Hide quest markers", "On objects and creatures, as in Vanilla", config.hideQuestMarkers) {
+            onChange(config.copy(hideQuestMarkers = it))
+        }
     }
 }
 

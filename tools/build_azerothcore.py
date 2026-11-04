@@ -51,6 +51,8 @@ APPS = {
     "worldserver": [
         "src/server/apps/worldserver/worldserver.conf.dist",
         "modules/mod-playerbots/conf/playerbots.conf.dist",
+        "modules/mod-autobalance/conf/AutoBalance.conf.dist",
+        "modules/mod-individual-progression/conf/individualProgression.conf.dist",
     ],
 }
 
@@ -176,10 +178,10 @@ def stage(usr: Path, app: str, lock: dict) -> None:
     legacy = usr / "lib" / "ossl-modules" / "legacy.so"
     links = termux.stage_closure({binary: f"lib{app}.so", legacy: "libossl_legacy.so"}, usr)
     links["legacy.so"] = "libossl_legacy.so"
-    # The NDK toolchain always compiles with -g; ship stripped, keep the unstripped
-    # binary in the build dir for symbolizing crashes.
+    # The NDK toolchain always compiles with -g. Ship without symbols (19 MB on the world
+    # server); the unstripped binary stays in the build dir for symbolizing crashes.
     strip = latest("*/toolchains/llvm/prebuilt/*/bin/llvm-strip", SDK / "ndk")
-    run(strip, "--strip-debug", termux.JNI / f"lib{app}.so")
+    run(strip, "--strip-all", termux.JNI / f"lib{app}.so")
 
     assets = termux.ASSETS / app
     if assets.exists():

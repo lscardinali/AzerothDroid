@@ -27,6 +27,11 @@ around you, close to your level, so the world feels populated.
   don't need. Around 12 MB per online bot, including the grids it loads.
 - **Careful with data and battery:** players are saved every two minutes, when memory runs low and
   on shutdown. The world server freezes when nobody has played for 6 minutes, and a login wakes it.
+- **Optional modules, off by default:** dungeon scaling for small groups (mod-autobalance), and moving
+  through Vanilla, TBC and WotLK content in order (mod-individual-progression). Turn them on in
+  Settings. Installing individual progression can't be undone: its first start rewrites the world
+  database, and turning it off later only stops its rules. The only way back is to uninstall the app,
+  which also deletes your characters and the client data.
 - **In-app management:** accounts, server rates, bot settings and live logs, all usable with a
   game controller.
 
@@ -38,7 +43,11 @@ around you, close to your level, so the world feels populated.
 
 ## Getting started
 
-No APK is published yet, so [build it from source](#building-from-source) first.
+Install the APK from [Releases](https://github.com/lscardinali/AzerothDroid/releases), or
+[build it from source](#building-from-source). To get updates automatically, add
+`https://github.com/lscardinali/AzerothDroid` as an app in
+[Obtainium](https://github.com/ImranR98/Obtainium). Updates keep your realm's data. The app isn't on
+the Play Store and won't be.
 
 1. Open the app and tap **Download and install** to fetch the client data.
 2. Tap **Start realm**. The first start imports the database and takes the longest.
@@ -86,8 +95,9 @@ Build the app and install it on a connected device:
 ./gradlew :app:installDebug
 ```
 
-Or let GitHub build it: run the **Build APK** workflow from the Actions tab, or push a `v*` tag. It
-takes hours, and the APK and its source are attached to the run as artifacts.
+`installDebug` keeps the app debuggable, which `tools/push_data.py` needs. Or let GitHub build it: run
+the **Build APK** workflow from the Actions tab, or push a `v*` tag to publish a release. It
+takes about an hour, and the optimized APK and its source are attached to the run as artifacts.
 
 Everything the scripts produce goes into the ignored `native/` subfolders `src`, `out`, `.build`
 and `.cache`.
@@ -164,6 +174,9 @@ AzerothDroid is packaging and tuning around other people's work. The game server
   [AUTHORS](https://github.com/azerothcore/azerothcore-wotlk/blob/master/AUTHORS) file.
 - [**mod-playerbots**](https://github.com/mod-playerbots/mod-playerbots) provides the bots, and its
   [AzerothCore fork](https://github.com/mod-playerbots/azerothcore-wotlk) is the core used here.
+- [**mod-autobalance**](https://github.com/azerothcore/mod-autobalance) and
+  [**mod-individual-progression**](https://github.com/ZhengPeiRu21/mod-individual-progression) provide
+  the optional modules.
 - [**MariaDB**](https://mariadb.org/) is the database.
 - [**Termux**](https://termux.dev/) supplies the Android builds of MariaDB and the libraries.
 - [**wowgaming/client-data**](https://github.com/wowgaming/client-data) hosts the data pack that

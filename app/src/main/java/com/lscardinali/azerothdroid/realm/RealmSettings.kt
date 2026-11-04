@@ -19,8 +19,10 @@ import kotlinx.coroutines.runBlocking
 data class RealmSettings(
     val world: WorldConfig = WorldConfig.DEFAULT,
     val bots: PlayerbotsConfig = PlayerbotsConfig.MODEST,
+    val autoBalance: AutoBalanceConfig = AutoBalanceConfig.DEFAULT,
+    val progression: IndividualProgressionConfig = IndividualProgressionConfig.DEFAULT,
 ) {
-    fun errors(): List<String> = world.errors() + bots.errors() + buildList {
+    fun errors(): List<String> = world.errors() + bots.errors() + autoBalance.errors() + progression.errors() + buildList {
         if (bots.maxLevel > world.maxPlayerLevel) {
             add("${PlayerbotsConfig.MAX_LEVEL} must not exceed ${WorldConfig.MAX_PLAYER_LEVEL}")
         }
@@ -134,6 +136,30 @@ class RealmSettingsStore(context: Context) {
                 put(int(IN_WORLD_MIN), b.inWorldMinSeconds, db.inWorldMinSeconds)
                 put(int(IN_WORLD_MAX), b.inWorldMaxSeconds, db.inWorldMaxSeconds)
             }
+            val a = settings.autoBalance
+            val da = AutoBalanceConfig.DEFAULT
+            with(AutoBalanceConfig) {
+                put(bool(ENABLE), a.enabled, da.enabled)
+                put(int(MIN_PLAYERS), a.minPlayers, da.minPlayers)
+                put(int(MIN_PLAYERS_RAID), a.minPlayersRaid, da.minPlayersRaid)
+                put(int(DIFFICULTY_OFFSET), a.difficultyOffset, da.difficultyOffset)
+                put(float(STAT_MODIFIER_KEYS.first()), a.statModifier, da.statModifier)
+                put(bool(LEVEL_SCALING), a.levelScaling, da.levelScaling)
+                put(bool(PLAYER_CHANGE_NOTIFY), a.announcePlayerChanges, da.announcePlayerChanges)
+            }
+            val p = settings.progression
+            val dp = IndividualProgressionConfig.DEFAULT
+            with(IndividualProgressionConfig) {
+                put(bool(ENABLE), p.enabled, dp.enabled)
+                put(int(PROGRESSION_LIMIT), p.progressionLimit, dp.progressionLimit)
+                put(int(STARTING_PROGRESSION), p.startingProgression, dp.startingProgression)
+                put(float(VANILLA_POWER), p.vanillaPower, dp.vanillaPower)
+                put(float(TBC_POWER), p.tbcPower, dp.tbcPower)
+                put(bool(BOT_ONLY_ADJUSTMENTS), p.botOnlyAdjustments, dp.botOnlyAdjustments)
+                put(bool(ENFORCE_GROUP_RULES), p.enforceGroupRules, dp.enforceGroupRules)
+                put(bool(DISABLE_RDF), p.disableRandomDungeonFinder, dp.disableRandomDungeonFinder)
+                put(bool(DISABLE_QUEST_MARKERS), p.hideQuestMarkers, dp.hideQuestMarkers)
+            }
         }
 
         fun decode(prefs: Preferences): RealmSettings {
@@ -205,7 +231,33 @@ class RealmSettingsStore(context: Context) {
                     inWorldMaxSeconds = prefs[int(IN_WORLD_MAX)] ?: db.inWorldMaxSeconds,
                 )
             }
-            return RealmSettings(world, bots)
+            val da = AutoBalanceConfig.DEFAULT
+            val autoBalance = with(AutoBalanceConfig) {
+                AutoBalanceConfig(
+                    enabled = prefs[bool(ENABLE)] ?: da.enabled,
+                    minPlayers = prefs[int(MIN_PLAYERS)] ?: da.minPlayers,
+                    minPlayersRaid = prefs[int(MIN_PLAYERS_RAID)] ?: da.minPlayersRaid,
+                    difficultyOffset = prefs[int(DIFFICULTY_OFFSET)] ?: da.difficultyOffset,
+                    statModifier = prefs[float(STAT_MODIFIER_KEYS.first())] ?: da.statModifier,
+                    levelScaling = prefs[bool(LEVEL_SCALING)] ?: da.levelScaling,
+                    announcePlayerChanges = prefs[bool(PLAYER_CHANGE_NOTIFY)] ?: da.announcePlayerChanges,
+                )
+            }
+            val dp = IndividualProgressionConfig.DEFAULT
+            val progression = with(IndividualProgressionConfig) {
+                IndividualProgressionConfig(
+                    enabled = prefs[bool(ENABLE)] ?: dp.enabled,
+                    progressionLimit = prefs[int(PROGRESSION_LIMIT)] ?: dp.progressionLimit,
+                    startingProgression = prefs[int(STARTING_PROGRESSION)] ?: dp.startingProgression,
+                    vanillaPower = prefs[float(VANILLA_POWER)] ?: dp.vanillaPower,
+                    tbcPower = prefs[float(TBC_POWER)] ?: dp.tbcPower,
+                    botOnlyAdjustments = prefs[bool(BOT_ONLY_ADJUSTMENTS)] ?: dp.botOnlyAdjustments,
+                    enforceGroupRules = prefs[bool(ENFORCE_GROUP_RULES)] ?: dp.enforceGroupRules,
+                    disableRandomDungeonFinder = prefs[bool(DISABLE_RDF)] ?: dp.disableRandomDungeonFinder,
+                    hideQuestMarkers = prefs[bool(DISABLE_QUEST_MARKERS)] ?: dp.hideQuestMarkers,
+                )
+            }
+            return RealmSettings(world, bots, autoBalance, progression)
         }
 
         private fun int(key: String) = intPreferencesKey(key)
