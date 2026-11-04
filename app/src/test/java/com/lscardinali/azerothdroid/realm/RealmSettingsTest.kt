@@ -30,6 +30,11 @@ class RealmSettingsTest {
             randomBotsEnabled = false, minRandomBots = 20, maxRandomBots = 40, maxLevel = 70,
             maps = setOf(0, 1), joinLfg = false, summonWhenGroup = false,
         ),
+        autoBalance = AutoBalanceConfig(enabled = true, minPlayers = 3, difficultyOffset = 2, statModifier = 1.5f, levelScaling = false),
+        progression = IndividualProgressionConfig(
+            enabled = true, progressionLimit = 13, startingProgression = 8, vanillaPower = 0.6f,
+            botOnlyAdjustments = true, hideQuestMarkers = false,
+        ),
     )
 
     @Test
@@ -42,6 +47,38 @@ class RealmSettingsTest {
             beyondDist.find(key)?.groupValues?.get(1)?.toInt()?.let { it <= 9 } ?: true
         }
         AuthServer.applyOverrides(dist("playerbots.conf.dist"), bots)
+        AuthServer.applyOverrides(dist("AutoBalance.conf.dist"), changed.autoBalance.overrides())
+        AuthServer.applyOverrides(dist("individualProgression.conf.dist"), changed.progression.overrides())
+    }
+
+    @Test
+    fun modulesStayOutOfTheWayUntilEnabled() {
+        val autoBalance = AutoBalanceConfig.DEFAULT.overrides()
+        assertEquals("0", autoBalance[AutoBalanceConfig.ENABLE])
+        val progression = IndividualProgressionConfig.DEFAULT.overrides()
+        // These apply at config load even with the module off; each would change the normal game.
+        listOf(
+            IndividualProgressionConfig.ENABLE, IndividualProgressionConfig.DISABLE_RDF,
+            IndividualProgressionConfig.DISABLE_QUEST_MARKERS, IndividualProgressionConfig.SIMPLE_CONFIG_OVERRIDE,
+            IndividualProgressionConfig.MAX_MONSTER_SIGHT,
+        ).forEach { assertEquals(it, "0", progression[it]) }
+        assertEquals("1", changed.progression.copy(hideQuestMarkers = true).overrides()[IndividualProgressionConfig.DISABLE_QUEST_MARKERS])
+    }
+
+    @Test
+    fun moduleDefaultsOtherwiseMatchTheDist() {
+        val tuned = setOf(
+            AutoBalanceConfig.ENABLE, IndividualProgressionConfig.ENABLE, IndividualProgressionConfig.DISABLE_QUEST_MARKERS,
+            IndividualProgressionConfig.SIMPLE_CONFIG_OVERRIDE, IndividualProgressionConfig.MAX_MONSTER_SIGHT,
+        )
+        val autoBalance = dist("AutoBalance.conf.dist")
+        AutoBalanceConfig.DEFAULT.overrides().filterKeys { it !in tuned }.forEach { (key, value) ->
+            assertEquals(key, distValue(autoBalance, key).toFloat(), value.toFloat())
+        }
+        val progression = dist("individualProgression.conf.dist")
+        IndividualProgressionConfig.DEFAULT.overrides().filterKeys { it !in tuned }.forEach { (key, value) ->
+            assertEquals(key, distValue(progression, key).toFloat(), value.toFloat())
+        }
     }
 
     @Test
@@ -143,5 +180,7 @@ class RealmSettingsTest {
         assertTrue(errors(RealmSettings(WorldConfig(maxPlayerLevel = 101))).contains("MaxPlayerLevel must be 1-100"))
         assertTrue(errors(RealmSettings(WorldConfig(xpKill = Float.NaN))).contains("Rate.XP.Kill"))
         assertTrue(errors(RealmSettings(WorldConfig(visibilityContinents = 30))).contains("Visibility.Distance.Continents"))
+        assertTrue(errors(RealmSettings(autoBalance = AutoBalanceConfig(minPlayers = 0))).contains("AutoBalance.MinPlayers"))
+        assertTrue(errors(RealmSettings(progression = IndividualProgressionConfig(progressionLimit = 5, startingProgression = 8))).contains("must not exceed"))
     }
 }

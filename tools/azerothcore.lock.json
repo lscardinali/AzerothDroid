@@ -7,6 +7,16 @@
       "repo": "https://github.com/mod-playerbots/mod-playerbots.git",
       "branch": "master",
       "commit": "05a1f6fceb8a32aa879b13f5f48934c6e46a774c"
+    },
+    "mod-autobalance": {
+      "repo": "https://github.com/azerothcore/mod-autobalance.git",
+      "branch": "master",
+      "commit": "1d707cb61a0962ab01e4123681e2d3b66cc558a2"
+    },
+    "mod-individual-progression": {
+      "repo": "https://github.com/ZhengPeiRu21/mod-individual-progression.git",
+      "branch": "master",
+      "commit": "4933d455d2f611eed50c74c68c78832df4ed37a3"
     }
   }
 }

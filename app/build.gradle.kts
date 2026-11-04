@@ -13,7 +13,8 @@ android {
         targetSdk = 36
         // CI passes its run number, so each build can install over the one before.
         versionCode = System.getenv("AZEROTHDROID_VERSION_CODE")?.toInt() ?: 1
-        versionName = "0.1.0"
+        // CI passes the version from the release tag.
+        versionName = System.getenv("AZEROTHDROID_VERSION_NAME") ?: "0.1.0"
 
         ndk {
             abiFilters += listOf("arm64-v8a")
@@ -37,8 +38,11 @@ android {
             sharedSigning?.let { signingConfig = it }
         }
         release {
-            isMinifyEnabled = false
-            sharedSigning?.let { signingConfig = it }
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            // Installed from GitHub, not a store, so an APK must always be signed to install.
+            signingConfig = sharedSigning ?: signingConfigs.getByName("debug")
         }
     }
 
@@ -62,6 +66,12 @@ android {
     androidResources {
         // sql.zip is already deflated; storing it avoids a second compression pass.
         noCompress += "zip"
+    }
+
+    // That block is encrypted for Google Play only; outside the store it is unreadable bytes.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
     }
 
     packaging {

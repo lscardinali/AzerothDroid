@@ -7,6 +7,18 @@ release. This is engineering guidance, not legal advice.
 An artifact from the **Build APK** workflow counts too, because anyone with a GitHub account can
 download artifacts from a public repository.
 
+## Publish
+
+Push a version tag, and the **Build APK** workflow builds the optimized APK and publishes it with its
+source as a GitHub release, which Obtainium can follow:
+
+```bash
+git tag v0.2.0 && git push origin v0.2.0
+```
+
+A tag with a hyphen, like `v0.2.0-beta`, makes a prerelease. Obtainium skips prereleases unless told
+otherwise.
+
 ## Provide the source
 
 GPL-2.0 requires the complete source for the binaries you distribute. The **Build APK** workflow
@@ -33,6 +45,11 @@ These come from how the upstream components combine. They only arise when binari
 - **AGPL-3.0 files in AzerothCore, with GPL-2.0-only mod-playerbots.** Fifteen core files carry
   AGPL-3.0-or-later headers, including `Trainer.cpp` and `TC9Sidecar/`. Upstream's combined binary
   has this same question. Raise it with upstream rather than working around it here.
+- **mod-autobalance has no licence file.** One source file carries a GPL notice and the rest carry
+  none, so its terms for redistribution aren't clear. Ask upstream to add a licence, or drop the module
+  from releases if that matters to you.
+- **mod-individual-progression mixes licences.** Its `LICENSE` says MIT, but 37 source files carry
+  AGPL-3.0 headers, which adds to the AGPL question above.
 - **OpenSSL (Apache-2.0) with GPL-2.0-only code.** Upstream ships this combination too, and the GPL's
   system library exception is harder to rely on when the APK bundles OpenSSL itself.
 

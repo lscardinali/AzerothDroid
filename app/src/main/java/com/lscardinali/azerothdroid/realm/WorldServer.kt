@@ -56,6 +56,7 @@ class WorldServer(context: Context, private val native: NativeRuntime, private v
                 if (NativeRuntime.isRunning(it, EXECUTABLE)) Log.w(TAG, "Stopping stale worldserver $it")
                 NativeRuntime.terminate(it, EXECUTABLE, timeoutSec = 60)
             }
+            dataPack.setOptionalSql(IndividualProgressionConfig.MODULE, settings.progression.enabled)
             writeConfig(settings)
             pidFile.delete()
             NativeRuntime.trimLog(stdoutFile)
@@ -139,9 +140,14 @@ class WorldServer(context: Context, private val native: NativeRuntime, private v
         val botsDist = File(etcDir, "modules/playerbots.conf.dist")
         native.copyAssets(assets + "worldserver.conf.dist", worldDist)
         native.copyAssets(assets + "playerbots.conf.dist", botsDist)
+        val autoBalanceDist = File(etcDir, "modules/AutoBalance.conf.dist")
+        val progressionDist = File(etcDir, "modules/individualProgression.conf.dist")
+        native.copyAssets(assets + "AutoBalance.conf.dist", autoBalanceDist)
+        native.copyAssets(assets + "individualProgression.conf.dist", progressionDist)
 
         // Infrastructure last: these are the app's, whatever the settings say.
-        val world = settings.world.overrides() + mapOf(
+        val moduleNeeds = if (settings.progression.enabled) mapOf("EnablePlayerSettings" to "1") else emptyMap()
+        val world = settings.world.overrides() + moduleNeeds + mapOf(
             "DataDir" to dataPack.clientData.path,
             "SourceDirectory" to dataPack.sourceDirectory.path,
             "LogsDir" to logsDir.path,
@@ -175,6 +181,13 @@ class WorldServer(context: Context, private val native: NativeRuntime, private v
             "Creatures.WaypointUpdatesWithoutPlayers" to "0",
         )
         configFile.writeText(AuthServer.applyOverrides(worldDist.readText(), world, additions))
+
+        File(etcDir, "modules/AutoBalance.conf").writeText(
+            AuthServer.applyOverrides(autoBalanceDist.readText(), settings.autoBalance.overrides()),
+        )
+        File(etcDir, "modules/individualProgression.conf").writeText(
+            AuthServer.applyOverrides(progressionDist.readText(), settings.progression.overrides()),
+        )
 
         val botOverrides = settings.bots.overrides() +
             ("PlayerbotsDatabaseInfo" to "127.0.0.1;${MariaDbServer.PORT};acore;acore;acore_playerbots")

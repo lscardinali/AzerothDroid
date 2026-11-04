@@ -1,5 +1,7 @@
-# Cross-compiles the servers and builds a debug APK, kept as a workflow artifact for 30 days.
-# Runs on demand and for version tags, not on every push: a full native build takes hours.
+# Cross-compiles the servers and builds the optimized release APK, kept as an artifact for 30 days.
+# A version tag also publishes it with its source as a GitHub release, which Obtainium can follow.
+# A tag with a hyphen, like v0.2.0-beta, makes a prerelease.
+# Runs on demand and for tags, not on every push: a full native build takes about an hour.
 name: Build APK
 
 on:
@@ -9,7 +11,7 @@ on:
       - "v*"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -59,11 +61,15 @@ jobs:
           echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/azerothdroid.keystore"
           echo "AZEROTHDROID_KEYSTORE=$RUNNER_TEMP/azerothdroid.keystore" >> "$GITHUB_ENV"
 
+      - name: Set version from the tag
+        if: github.ref_type == 'tag'
+        run: echo "AZEROTHDROID_VERSION_NAME=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
       - name: Test and build the app
         env:
           AZEROTHDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           AZEROTHDROID_VERSION_CODE: ${{ github.run_number }}
-        run: ./gradlew :app:testDebugUnitTest :app:assembleDebug
+        run: ./gradlew :app:testDebugUnitTest :app:assembleRelease
 
       # GPL-2.0 requires the matching source wherever the APK is offered.
       - name: Collect source
@@ -74,7 +80,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: AzerothDroid-${{ github.ref_name }}-${{ github.sha }}
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: app/build/outputs/apk/release/app-release.apk
           retention-days: 30
           if-no-files-found: error
           compression-level: 0
@@ -86,3 +92,15 @@ jobs:
           retention-days: 30
           if-no-files-found: error
           compression-level: 0
+
+      - name: Publish the release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          apk="$RUNNER_TEMP/AzerothDroid-$AZEROTHDROID_VERSION_NAME.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$apk"
+          prerelease=""
+          case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "$GITHUB_REF_NAME" "$apk" native/.build/source-bundle/* \
+            --verify-tag --generate-notes $prerelease --title "AzerothDroid $AZEROTHDROID_VERSION_NAME"

@@ -62,6 +62,33 @@ class DataPack(private val context: Context) {
         check(staging.renameTo(sourceDirectory)) { "could not move SQL into place" }
     }
 
+    /**
+     * AzerothCore's updater applies the SQL of every compiled module, so a module whose SQL should
+     * wait for the player's choice has it parked outside the path the updater reads. Once applied
+     * it stays in place: the updater would otherwise forget it and run it a second time on the
+     * next enable, and new versions of the module must keep updating the same database.
+     */
+    fun setOptionalSql(module: String, enabled: Boolean) {
+        val applied = sqlAppliedMarker(module)
+        if (enabled) {
+            applied.parentFile?.mkdirs()
+            applied.createNewFile()
+        }
+        val active = File(sourceDirectory, "modules/$module/data/sql")
+        val parked = File(sourceDirectory, "parked-sql/$module")
+        val wanted = applied.exists()
+        val (from, to) = if (wanted) parked to active else active to parked
+        if (!from.exists()) return
+        to.parentFile?.mkdirs()
+        to.deleteRecursively()
+        check(from.renameTo(to)) { "could not move SQL of $module" }
+    }
+
+    /** Whether a realm start has already let [module]'s SQL into the world database. */
+    fun optionalSqlApplied(module: String): Boolean = sqlAppliedMarker(module).exists()
+
+    private fun sqlAppliedMarker(module: String) = File(context.filesDir, "azerothcore/$module.sql-applied")
+
     /** Throws with a user-facing message unless everything the servers need is present. */
     fun check() {
         check(installedVersion(sourceDirectory) == sqlIdentity) { "SQL not unpacked yet" }
