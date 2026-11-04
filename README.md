@@ -17,9 +17,9 @@ around you, close to your level, so the world feels populated.
 > **Unofficial.** Not affiliated with or endorsed by Blizzard Entertainment, AzerothCore or
 > mod-playerbots. You need your own legally obtained game client; none is included.
 
-<img height="700" alt="Screenshot_20261104-105629" src="https://github.com/user-attachments/assets/6ce77ac9-722d-45e9-8a65-36d64919de9c" />
-<img height="700" alt="Screenshot_20261104-105651" src="https://github.com/user-attachments/assets/7ec7b15c-e055-4db3-b47e-6f89151d0b2d" />
-<img height="700" alt="Screenshot_20261104-105700" src="https://github.com/user-attachments/assets/6e861d34-d924-477a-a3ad-24d057850719" />
+<img height="600" alt="Screenshot_20261104-105629" src="https://github.com/user-attachments/assets/6ce77ac9-722d-45e9-8a65-36d64919de9c" />
+<img height="600" alt="Screenshot_20261104-105651" src="https://github.com/user-attachments/assets/7ec7b15c-e055-4db3-b47e-6f89151d0b2d" />
+<img height="600" alt="Screenshot_20261104-105700" src="https://github.com/user-attachments/assets/6e861d34-d924-477a-a3ad-24d057850719" />
 
 ## Features
 
