@@ -19,14 +19,18 @@ jobs:
     # GitHub stops hosted jobs at 6 hours; end first so the logs say why.
     timeout-minutes: 350
     steps:
-      - uses: actions/checkout@v7
+      # Actions are pinned to commits, as a tag can be moved; Dependabot keeps them current.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Publishing uses its own token, so the build has no reason to find one in .git.
+          persist-credentials: false
 
-      - uses: actions/setup-java@v6
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: "25"
 
-      - uses: gradle/actions/setup-gradle@v6
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
       # The scripts use the newest NDK and CMake in the SDK, so leave only the pinned ones.
       - name: Install Android toolchain
@@ -37,7 +41,7 @@ jobs:
           "$sdkmanager" "ndk;30.0.16248370" "cmake;4.1.2" "platforms;android-37.0" "build-tools;36.0.0"
 
       # Termux's repository can drop old package versions; keep the pinned ones.
-      - uses: actions/cache@v6
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: native/.cache
           key: termux-${{ hashFiles('tools/termux.lock.json') }}
@@ -71,13 +75,21 @@ jobs:
           AZEROTHDROID_VERSION_CODE: ${{ github.run_number }}
         run: ./gradlew :app:testDebugUnitTest :app:assembleRelease
 
-      # GPL-2.0 requires the matching source wherever the APK is offered.
+      # Nothing after signing needs the key, and the steps that follow include third-party code.
+      # Gradle's daemon goes too, as it would keep the password in its environment.
+      - name: Remove signing key
+        if: always()
+        run: |
+          ./gradlew --stop || true
+          rm -f "$RUNNER_TEMP/azerothdroid.keystore"
+
+      # GPL-2.0 requires the matching source wherever the APK is offered; see "Publish the release".
       - name: Collect source
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: python3 tools/collect_sources.py
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: AzerothDroid-${{ github.ref_name }}-${{ github.sha }}
           path: app/build/outputs/apk/release/app-release.apk
@@ -85,7 +97,7 @@ jobs:
           if-no-files-found: error
           compression-level: 0
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: AzerothDroid-source-${{ github.ref_name }}-${{ github.sha }}
           path: native/.build/source-bundle/
@@ -93,14 +105,27 @@ jobs:
           if-no-files-found: error
           compression-level: 0
 
+      # The release carries only the APK. Its source goes to one shared "sources" release, which the
+      # notes link to, so the license's offer of source sits next to the download.
+      # The tag doesn't match v*, so making it doesn't start another build.
       - name: Publish the release
         if: github.ref_type == 'tag'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          sources="https://github.com/$GITHUB_REPOSITORY/releases/tag/sources"
+          if ! gh release view sources > /dev/null 2>&1; then
+            gh release create sources --prerelease --latest=false --target "$GITHUB_SHA" \
+              --title "Source code for AzerothDroid releases" \
+              --notes "Source for the GPL and LGPL parts of each AzerothDroid APK. source-<version>.txt lists the files that match that version."
+          fi
+          cp native/.build/source-bundle/README.txt "$RUNNER_TEMP/source-$GITHUB_REF_NAME.txt"
+          gh release upload sources native/.build/source-bundle/*.tar.gz "$RUNNER_TEMP/source-$GITHUB_REF_NAME.txt" --clobber
+
           apk="$RUNNER_TEMP/AzerothDroid-$AZEROTHDROID_VERSION_NAME.apk"
           cp app/build/outputs/apk/release/app-release.apk "$apk"
           prerelease=""
           case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
-          gh release create "$GITHUB_REF_NAME" "$apk" native/.build/source-bundle/* \
-            --verify-tag --generate-notes $prerelease --title "AzerothDroid $AZEROTHDROID_VERSION_NAME"
+          gh release create "$GITHUB_REF_NAME" "$apk" \
+            --verify-tag --generate-notes $prerelease --title "AzerothDroid $AZEROTHDROID_VERSION_NAME" \
+            --notes "Source code for this APK: [sources]($sources), files listed in source-$GITHUB_REF_NAME.txt."
