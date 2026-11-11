@@ -60,6 +60,31 @@ its package repository:
 | Kotlin standard library | Apache-2.0 |
 | Gradle wrapper, included in this repository | Apache-2.0 |
 
+## Game client runtime (`wine/` module)
+
+The `wine/` module's Kotlin and Java source is in this repository, taken from WoWForeverywhere
+1.0.8. Its native libraries and runtime come prebuilt from release APKs pinned by SHA-256 in
+`tools/stage_wine.py`. Because this module is GPL-3.0, an APK built from this repository is
+distributed under GPL-3.0 as a whole.
+
+| Component | Licence | Source |
+|---|---|---|
+| WoWForeverywhere (Java/Kotlin in `wine/src`, native libraries, Proton and Turnip packages) | GPL-3.0 | [YoruDev-Ryland/WoWForeverywhere](https://github.com/YoruDev-Ryland/WoWForeverywhere) v1.0.8 |
+| GameNative (the engine WoWForeverywhere is built on; FEXCore and DXVK packages) | GPL-3.0 | [utkarshdalal/GameNative](https://github.com/utkarshdalal/GameNative) v1.4.0 |
+| Winlator (`com.winlator` code) | LGPL-2.1 | [brunodev85/winlator](https://github.com/brunodev85/winlator) |
+| libredirect (`libredirect-bionic-wx.so`, `redirect.tzst`) | Proprietary, closed source, by GameNative's maintainers; runs only inside the Wine processes | GameNative |
+| Wine / Proton 11 (arm64ec) | LGPL-2.1-or-later | [ValveSoftware/Proton](https://github.com/ValveSoftware/Proton), [WineHQ](https://www.winehq.org/) |
+| FEX-Emu (FEXCore 2605) | MIT | [FEX-Emu/FEX](https://github.com/FEX-Emu/FEX) |
+| Box64 / wowbox64 | MIT | [ptitSeb/box64](https://github.com/ptitSeb/box64) |
+| DXVK 2.4.1 and its gplasync patches | Zlib | [doitsujin/dxvk](https://github.com/doitsujin/dxvk), [Ph42oN/dxvk-gplasync](https://gitlab.com/Ph42oN/dxvk-gplasync) |
+| Mesa Turnip (Adreno Vulkan driver builds) | MIT | [mesa3d](https://gitlab.freedesktop.org/mesa/mesa) |
+| PulseAudio | LGPL-2.1-or-later | [pulseaudio](https://www.freedesktop.org/wiki/Software/PulseAudio/) |
+| zstd-jni, Apache Commons Compress, XZ for Java, OkHttp, AndroidSVG, Timber, Compose Settings | BSD-2-Clause (zstd-jni), Apache-2.0 (the rest), XZ for Java public domain | Maven Central |
+
+The controller layout follows [WoWpadX](https://github.com/leoaviana/WoWpadX) (MIT) and the
+calibration format of [ConsolePortLK](https://github.com/leoaviana/ConsolePortLK) (Artistic-2.0);
+neither is included in the APK.
+
 ## Not included: game client and client data
 
 No Blizzard file is in this repository or in the APK. During setup, at the user's request, the

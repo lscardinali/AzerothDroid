@@ -82,6 +82,8 @@ android {
 }
 
 dependencies {
+    // The WoW client: GameNative's Wine engine (Android 10+, see GameLauncher).
+    implementation(project(":wine"))
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

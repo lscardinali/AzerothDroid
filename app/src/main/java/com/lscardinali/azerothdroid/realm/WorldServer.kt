@@ -173,6 +173,9 @@ class WorldServer(context: Context, private val native: NativeRuntime, private v
             "MinWorldUpdateTime" to "10",
             // Android can kill the realm without warning; lose at most two minutes of play.
             "PlayerSaveInterval" to "120000",
+            // The client on this phone is frozen while the app is in the background and sends no
+            // keepalives; keep its session for 15 minutes (as at character select), not 1.
+            "SocketTimeOutTimeActive" to "900000",
         )
         val additions = mapOf(
             // Patch 0008: English clients only, skip a few hundred MB of translations.

@@ -12,6 +12,7 @@ captures/
 # Staged native runtimes (tools/stage_*.py)
 native/out/
 native/.cache/
+native/.wine-cache/
 native/src/
 native/.build/
 
@@ -24,3 +25,6 @@ __pycache__/
 # Signing keys
 *.keystore
 *.jks
+
+# Wine runtime taken from the WoWForeverywhere release APK (tools/stage_wine.py)
+wine/prebuilt/

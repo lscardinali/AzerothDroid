@@ -16,7 +16,7 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.lscardinali.azerothdroid.MainActivity
 import com.lscardinali.azerothdroid.R
-import com.lscardinali.azerothdroid.realm.DataPack
+import com.lscardinali.azerothdroid.realm.DataLocation
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -24,7 +24,8 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 /**
- * Runs the one-time setup work (client data download and extraction) as a foreground
+ * Runs the one-time setup work (client data download and extraction, or moving it to
+ * another [DataLocation]) as a foreground
  * service, so it keeps going with the screen off or the app in the background.
  * Unlike the realm, this is finite work, so it holds wake and Wi-Fi locks while it runs.
  */
@@ -48,13 +49,14 @@ class SetupService : Service() {
         val wifiLock = (applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager)
             .createWifiLock(WifiManager.WIFI_MODE_FULL_HIGH_PERF, "AzerothDroid:setup").apply { acquire() }
 
-        val installer = ClientDataInstaller(DataPack(this))
+        val installer = ClientDataInstaller(this)
+        val moveTo = intent?.getStringExtra(EXTRA_MOVE_TO)?.let { name -> DataLocation.entries.firstOrNull { it.name == name } }
         val progressUpdates = scope.launch {
             ClientDataInstaller.progress.collect { updateNotification(it) }
         }
         scope.launch {
             try {
-                installer.run()
+                if (moveTo != null) installer.move(moveTo) else installer.run()
             } finally {
                 progressUpdates.cancel()
                 if (wakeLock.isHeld) wakeLock.release()
@@ -79,6 +81,9 @@ class SetupService : Service() {
             is ClientDataInstaller.Progress.Extracting ->
                 "Extracting client data: ${progress.files} / ${progress.total} files" to
                     (progress.files * 100 / progress.total.coerceAtLeast(1))
+            is ClientDataInstaller.Progress.Moving ->
+                "Moving game data to ${progress.to.label}: ${progress.bytes / MB} / ${progress.total / MB} MB" to
+                    (progress.bytes * 100 / progress.total.coerceAtLeast(1)).toInt()
             else -> return
         }
         getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification(text, percent))
@@ -109,7 +114,15 @@ class SetupService : Service() {
         /** Safety net; the download plus extraction takes minutes, not hours. */
         private const val LOCK_TIMEOUT_MS = 3 * 60 * 60 * 1000L
 
+        private const val EXTRA_MOVE_TO = "moveTo"
+
         fun start(context: Context) =
             ContextCompat.startForegroundService(context, Intent(context, SetupService::class.java))
+
+        /** Moves the game data to [to] (or just switches, when none is installed). Realm must be stopped. */
+        fun move(context: Context, to: DataLocation) =
+            ContextCompat.startForegroundService(
+                context, Intent(context, SetupService::class.java).putExtra(EXTRA_MOVE_TO, to.name),
+            )
     }
 }

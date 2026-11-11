@@ -125,6 +125,7 @@ fun SettingsScreen(modifier: Modifier, primaryFocus: FocusRequester, realmRunnin
                     ProgressionCard(current.progression, progressionInstalled, unparsed) { draft = current.copy(progression = it) }
                 }
             }
+            DataLocationPanel(realmRunning)
             AboutCard()
         }
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {

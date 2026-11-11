@@ -49,6 +49,15 @@ jobs:
       - name: Stage MariaDB
         run: python3 tools/stage_mariadb.py
 
+      # The WoW client runtime (Wine, Proton, FEX, DXVK) from pinned release APKs; see the script.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: native/.wine-cache
+          key: wine-${{ hashFiles('tools/stage_wine.py') }}
+
+      - name: Stage the Wine runtime
+        run: python3 tools/stage_wine.py
+
       # Four jobs, not ninja's default six: the larger files need several GB of RAM each.
       - name: Build AzerothCore and mod-playerbots
         run: python3 tools/build_azerothcore.py --jobs 4

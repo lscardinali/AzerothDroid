@@ -61,7 +61,7 @@ class NativeRuntime(private val context: Context) {
         home: File,
         extraEnv: Map<String, String> = emptyMap(),
     ): ProcessBuilder =
-        ProcessBuilder(listOf(File(nativeDir, executable).path) + args).apply {
+        ProcessBuilder(affinityPrefix + listOf(File(nativeDir, executable).path) + args).apply {
             environment()["LD_LIBRARY_PATH"] = libDir.path
             // OpenSSL providers (legacy.so, for RC4) are linked into libDir too.
             environment()["OPENSSL_MODULES"] = libDir.path
@@ -75,6 +75,31 @@ class NativeRuntime(private val context: Context) {
 
     companion object {
         private const val TAG = "NativeRuntime"
+        private const val TASKSET = "/system/bin/taskset"
+
+        /**
+         * Keeps the servers off the phone's prime core(s), so the game client's main thread, which
+         * limits its frame rate, has one to itself. Through toybox taskset, which execs the server
+         * (same pid) with a CPU mask that all its threads inherit. Only when the fastest cores are
+         * a separate cluster of one or two out of six or more: on other chips there is no spare
+         * fast core, and taking big cores from the servers would only slow the realm.
+         */
+        private val affinityPrefix: List<String> by lazy {
+            runCatching {
+                val freqs = (0 until Runtime.getRuntime().availableProcessors()).map { cpu ->
+                    File("/sys/devices/system/cpu/cpu$cpu/cpufreq/cpuinfo_max_freq").readText().trim().toLong()
+                }
+                val top = freqs.max()
+                val prime = freqs.indices.filter { freqs[it] == top }
+                if (freqs.size < 6 || prime.size > 2 || !File(TASKSET).canExecute()) return@runCatching emptyList()
+                val mask = freqs.indices.filter { it !in prime }.fold(0L) { acc, cpu -> acc or (1L shl cpu) }
+                Log.i(TAG, "Servers on CPUs ${freqs.indices - prime.toSet()}, leaving $prime to the game")
+                listOf(TASKSET, mask.toString(16))
+            }.getOrElse {
+                Log.w(TAG, "No CPU affinity for the servers", it)
+                emptyList()
+            }
+        }
         private const val SIGTERM = 15
 
         fun readPid(pidFile: File): Int? = pidFile.takeIf { it.isFile }?.readText()?.trim()?.toIntOrNull()

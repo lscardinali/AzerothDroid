@@ -60,8 +60,13 @@ fun RealmScreen(
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        if (!clientDataReady) SetupPanel(clientDataVersion, setup, primaryFocus, onSetup)
+        if (!clientDataReady) {
+            SetupPanel(clientDataVersion, setup, primaryFocus, onSetup)
+            // Before the download, so the 4 GB can go straight to the SD card.
+            DataLocationPanel(realmRunning = status != null)
+        }
         RealmPanel(status, clientDataReady, if (clientDataReady) primaryFocus else null, onStart, onStop)
+        if (clientDataReady) PlayPanel(realmUp = status?.optJSONObject("worldserver")?.optString("state").let { it == "RUNNING" || it == "PAUSED" })
         if (status != null) ServersPanel(status)
         MemoryPanel(status, device)
         ConnectPanel(status)
@@ -254,6 +259,8 @@ private fun SetupPanel(version: String, progress: ClientDataInstaller.Progress, 
             ClientDataInstaller.Progress.Idle ->
                 Button(onClick = onSetup, modifier = buttonModifier) { Text("Download and install") }
             ClientDataInstaller.Progress.Done -> Text("Installed")
+            // Shown by DataLocationPanel.
+            is ClientDataInstaller.Progress.Moving -> Unit
         }
     }
 }

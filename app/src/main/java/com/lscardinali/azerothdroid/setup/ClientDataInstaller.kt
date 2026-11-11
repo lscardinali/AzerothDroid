@@ -1,7 +1,9 @@
 package com.lscardinali.azerothdroid.setup
 
+import android.content.Context
 import android.os.StatFs
 import android.util.Log
+import com.lscardinali.azerothdroid.realm.DataLocation
 import com.lscardinali.azerothdroid.realm.DataPack
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,26 +20,33 @@ import java.util.zip.ZipFile
  * download the pinned wowgaming/client-data release zip, extract it into place, then
  * delete the zip. An interrupted download resumes where it stopped (HTTP Range).
  */
-class ClientDataInstaller(private val dataPack: DataPack) {
+class ClientDataInstaller(private val context: Context) {
+
+    private val dataPack = DataPack(context)
 
     sealed interface Progress {
         data object Idle : Progress
         data class Downloading(val bytes: Long, val total: Long) : Progress
         data class Extracting(val files: Int, val total: Int) : Progress
+        data class Moving(val bytes: Long, val total: Long, val to: DataLocation) : Progress
         data object Done : Progress
         data class Failed(val message: String) : Progress
     }
 
-    private val target = dataPack.clientData
-    private val work = File(target.parentFile, "client-data-setup")
-    private val archive = File(work, "data.zip")
-    private val partial = File(work, "data.zip.part")
-    private val staging = File(work, "extracted")
+    /** The data location's folder, fixed for the whole run. */
+    private lateinit var root: File
+    private val target get() = DataPack.clientDataIn(root)
+    private val work get() = File(root, DataPack.SETUP_DIR)
+    private val archive get() = File(work, "data.zip")
+    private val partial get() = File(work, "data.zip.part")
+    private val staging get() = File(work, "extracted")
 
     /** Blocking. Reports through [progress]; never throws. */
     fun run() {
         try {
-            if (dataPack.clientDataInstalled) {
+            root = dataPack.root
+                ?: throw IOException("SD card not found: insert it, or choose internal storage in Settings")
+            if (dataPack.clientDataInstalledIn(root)) {
                 _progress.value = Progress.Done
                 return
             }
@@ -117,6 +126,75 @@ class ClientDataInstaller(private val dataPack: DataPack) {
         check(staging.renameTo(target)) { "could not move client data into place" }
         archive.delete()
         work.deleteRecursively()
+    }
+
+    /**
+     * Blocking: switches the game data to [to], copying installed client data across first so
+     * it needn't be downloaded again. The unpacked SQL is not copied: the next realm start
+     * unpacks it from the APK at the new location. Only the copy is ever deleted on failure;
+     * the old location is cleared once the new one is in use. The realm must be stopped.
+     * Reports through [progress]; never throws.
+     */
+    fun move(to: DataLocation) {
+        try {
+            val from = dataPack.location
+            if (from == to) {
+                _progress.value = Progress.Idle
+                return
+            }
+            val toRoot = to.root(context)
+                ?: throw IOException("SD card not found: insert it and try again")
+            // No card: nothing can be copied off it, so just switch (its data stays on the card).
+            val fromRoot = from.root(context)
+            if (fromRoot != null && dataPack.clientDataInstalledIn(fromRoot) && !dataPack.clientDataInstalledIn(toRoot)) {
+                copyClientData(DataPack.clientDataIn(fromRoot), DataPack.clientDataIn(toRoot), to)
+            }
+            DataLocation.set(context, to)
+            fromRoot?.let {
+                for (dir in listOf(DataPack.clientDataIn(it), DataPack.sourceDirectoryIn(it), File(it, DataPack.SETUP_DIR))) {
+                    dir.deleteRecursively()
+                }
+            }
+            _progress.value = if (dataPack.clientDataInstalledIn(toRoot)) Progress.Done else Progress.Idle
+        } catch (e: Exception) {
+            Log.e(TAG, "Moving game data failed", e)
+            _progress.value = Progress.Failed("Moving game data failed: ${e.message ?: e}")
+        }
+    }
+
+    private fun copyClientData(source: File, target: File, to: DataLocation) {
+        val files = source.walkTopDown().filter { it.isFile && it.name != DataPack.VERSION_FILE }.toList()
+        val total = files.sumOf { it.length() }
+        val copy = File(target.path + ".tmp")
+        copy.deleteRecursively()
+        copy.mkdirs()
+        val free = StatFs(copy.path).availableBytes
+        check(free > total + MARGIN) {
+            "Not enough space on ${to.label}: need ${(total + MARGIN) / MB} MB, ${free / MB} MB free"
+        }
+        try {
+            var done = 0L
+            var lastReport = 0L
+            _progress.value = Progress.Moving(0, total, to)
+            for (file in files) {
+                val dest = File(copy, file.relativeTo(source).path)
+                dest.parentFile?.mkdirs()
+                file.inputStream().use { input -> dest.outputStream().use { input.copyTo(it, 1 shl 16) } }
+                check(dest.length() == file.length()) { "copy of ${file.name} is incomplete" }
+                done += file.length()
+                if (done - lastReport > REPORT_EVERY) {
+                    _progress.value = Progress.Moving(done, total, to)
+                    lastReport = done
+                }
+            }
+            // Last, so an interrupted copy never reads as installed.
+            File(source, DataPack.VERSION_FILE).copyTo(File(copy, DataPack.VERSION_FILE), overwrite = true)
+            target.deleteRecursively()
+            check(copy.renameTo(target)) { "could not move the copy into place" }
+        } catch (e: Exception) {
+            copy.deleteRecursively()
+            throw e
+        }
     }
 
     private fun ensureFreeSpace(bytes: Long) {

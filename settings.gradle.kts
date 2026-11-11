@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "AzerothDroid"
 include(":app")
+include(":wine")

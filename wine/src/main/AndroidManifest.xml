@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Wine opens the game folder by path (e.g. on the SD card), so it needs all-files access. -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" tools:ignore="ScopedStorage" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <uses-feature android:name="android.hardware.vulkan.level" android:required="false" />
+    <uses-feature android:name="android.hardware.gamepad" android:required="false" />
+
+    <application>
+        <!-- The game, full screen. Same process as the realm and UI, like the rest of the app.
+             Every config change is handled in place: recreating it would kill Wine. -->
+        <activity
+            android:name="app.gamenative.azerothdroid.GameActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|density|fontScale|layoutDirection|colorMode|touchscreen"
+            android:launchMode="singleTask"
+            android:taskAffinity="com.lscardinali.azerothdroid.game"
+            android:resizeableActivity="false"
+            android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen"
+            android:windowSoftInputMode="adjustNothing" />
+    </application>
+</manifest>

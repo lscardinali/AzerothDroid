@@ -41,6 +41,17 @@ class Accounts(private val database: MariaDbServer) {
         return output.lines().last { it.isNotBlank() }.trim().toInt()
     }
 
+    /** Whether [password] is [name]'s, checked against the stored SRP6 verifier. */
+    fun checkPassword(name: String, password: String): Boolean {
+        val username = name.uppercase()
+        if (!NAME.matches(username)) return false
+        val row = database
+            .execute("SELECT HEX(salt), HEX(verifier) FROM acore_auth.account WHERE username = '$username';")
+            .lines().drop(1).firstOrNull { it.isNotBlank() } ?: return false
+        val (salt, stored) = row.trim().split(Regex("\\s+")).takeIf { it.size == 2 } ?: return false
+        return verifier(username, password.uppercase(), salt.unhex()).hex().equals(stored, ignoreCase = true)
+    }
+
     fun list(): List<String> = database
         .execute("SELECT username FROM acore_auth.account ORDER BY id;")
         .lines().drop(1)
@@ -70,5 +81,7 @@ class Accounts(private val database: MariaDbServer) {
         }
 
         private fun ByteArray.hex() = joinToString("") { "%02x".format(it) }
+
+        private fun String.unhex() = chunked(2).map { it.toInt(16).toByte() }.toByteArray()
     }
 }

@@ -20,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -27,10 +28,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.lscardinali.azerothdroid.game.AutoLoginStore
 import com.lscardinali.azerothdroid.realm.RealmService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -43,11 +46,14 @@ import kotlinx.coroutines.withContext
 @Composable
 fun AccountsScreen(modifier: Modifier, primaryFocus: FocusRequester, databaseRunning: Boolean) {
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
     var existing by remember { mutableStateOf<List<String>?>(null) }
     var name by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var gm by remember { mutableStateOf(true) }
     var message by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+    val autoLogin = remember(context) { AutoLoginStore(context) }
+    var autoLoginRevision by remember { mutableIntStateOf(0) }
 
     suspend fun refresh() {
         existing = withContext(Dispatchers.IO) { runCatching { RealmService.accounts()?.list() }.getOrNull() }
@@ -112,7 +118,13 @@ fun AccountsScreen(modifier: Modifier, primaryFocus: FocusRequester, databaseRun
                                 runCatching {
                                     val accounts = checkNotNull(RealmService.accounts()) { "Database not running" }
                                     accounts.create(name, password, gm)
-                                    true to "Created ${name.uppercase()}"
+                                    // The first account is the one the game logs into, until another is chosen.
+                                    if (autoLogin.get() == null) {
+                                        autoLogin.set(name, password)
+                                        true to "Created ${name.uppercase()}. Play logs in as it."
+                                    } else {
+                                        true to "Created ${name.uppercase()}"
+                                    }
                                 }.getOrElse {
                                     val text = it.message ?: it.toString()
                                     false to if ("Duplicate entry" in text) "${name.uppercase()} already exists" else text
@@ -124,6 +136,7 @@ fun AccountsScreen(modifier: Modifier, primaryFocus: FocusRequester, databaseRun
                                 // Create just disabled itself; start the next account.
                                 primaryFocus.requestFocus()
                             }
+                            autoLoginRevision++
                             refresh()
                         }
                     },
@@ -137,5 +150,6 @@ fun AccountsScreen(modifier: Modifier, primaryFocus: FocusRequester, databaseRun
                 }
             }
         }
+        AutoLoginPanel(autoLoginRevision)
     }
 }
